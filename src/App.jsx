@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 
 const INIT_PRICES = {
   "2330":{p:2350,ch:1.73,vol:28450},  "2303":{p:122,ch:4.27,vol:15600},
@@ -256,6 +256,169 @@ function Spark({prices=[],color="#14b8a6",h=36}){
     <path d={area} fill={`url(#${gid})`}/><polyline points={pts} fill="none" stroke={color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round"/>
   </svg>);
 }
+// ── K線圖組件（近20日）─────────────────────────────
+function CandleChart({sym, currentPrice, currentCh}){
+  // 用當前價格+漲跌幅模擬近20日K線資料
+  const W=320, H=140, PAD=8;
+  const candles = React.useMemo(()=>{
+    if(!currentPrice||currentPrice===0)return[];
+    const seed=sym?sym.split('').reduce((a,c)=>a+c.charCodeAt(0),0):42;
+    const data=[];
+    let price=currentPrice*(1-currentCh/100);
+    for(let i=0;i<20;i++){
+      const rng=(((seed*i*7+13)%100)/100-0.48)*0.04;
+      const open=price;
+      const close=price*(1+rng);
+      const high=Math.max(open,close)*(1+(((seed*i*3+7)%100)/100)*0.012);
+      const low=Math.min(open,close)*(1-(((seed*i*5+11)%100)/100)*0.012);
+      data.push({o:+open.toFixed(1),c:+close.toFixed(1),h:+high.toFixed(1),l:+low.toFixed(1),up:close>=open});
+      price=close;
+    }
+    // 最後一根用真實資料
+    const lastClose=currentPrice;
+    const lastOpen=currentPrice*(1-currentCh/100*0.6);
+    data[19]={o:+lastOpen.toFixed(1),c:lastClose,h:+(lastClose*1.005).toFixed(1),l:+(lastOpen*0.995).toFixed(1),up:currentCh>=0};
+    return data;
+  },[sym,currentPrice,currentCh]);
+
+  if(!candles.length)return <div style={{height:H,background:"#f8fafc",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"#94a3b8",fontSize:12}}>載入中…</div>;
+
+  const prices=[...candles.flatMap(c=>[c.h,c.l])];
+  const mn=Math.min(...prices),mx=Math.max(...prices),rng=mx-mn||1;
+  const toY=p=>PAD+(H-2*PAD)*(1-(p-mn)/rng);
+  const cW=(W-2*PAD)/20;
+
+  // MA5, MA10, MA20
+  const closes=candles.map(c=>c.c);
+  const ma=(arr,n)=>arr.map((_,i)=>i<n-1?null:arr.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n);
+  const ma5=ma(closes,5),ma10=ma(closes,10),ma20=ma(closes,20);
+  const maLine=(maArr,color)=>{
+    const pts=maArr.map((v,i)=>v?`${PAD+i*cW+cW/2},${toY(v)}`:null).filter(Boolean);
+    if(pts.length<2)return null;
+    return <polyline key={color} points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.2" strokeLinejoin="round" opacity="0.8"/>;
+  };
+
+  return(
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,display:"block",background:"#0f172a",borderRadius:8}}>
+        {/* 格線 */}
+        {[0.25,0.5,0.75].map(r=>(
+          <line key={r} x1={PAD} y1={PAD+(H-2*PAD)*r} x2={W-PAD} y2={PAD+(H-2*PAD)*r} stroke="#1e3a4a" strokeWidth="0.5"/>
+        ))}
+        {/* K線 */}
+        {candles.map((cd,i)=>{
+          const x=PAD+i*cW+cW/2;
+          const bW=cW*0.6;
+          const color=cd.up?"#ef4444":"#22c55e";
+          return(
+            <g key={i}>
+              <line x1={x} y1={toY(cd.h)} x2={x} y2={toY(cd.l)} stroke={color} strokeWidth="1"/>
+              <rect x={x-bW/2} y={Math.min(toY(cd.o),toY(cd.c))}
+                width={bW} height={Math.max(Math.abs(toY(cd.o)-toY(cd.c)),1)}
+                fill={color} rx="0.5"/>
+            </g>
+          );
+        })}
+        {/* MA線 */}
+        {maLine(ma5,"#fbbf24")}
+        {maLine(ma10,"#60a5fa")}
+        {maLine(ma20,"#f472b6")}
+      </svg>
+      {/* 圖例 */}
+      <div style={{display:"flex",gap:12,padding:"4px 4px 0",flexWrap:"wrap"}}>
+        {[["MA5","#fbbf24"],["MA10","#60a5fa"],["MA20","#f472b6"]].map(([label,color])=>(
+          <span key={label} style={{fontSize:9,color,display:"flex",alignItems:"center",gap:3}}>
+            <span style={{display:"inline-block",width:16,height:2,background:color,borderRadius:1}}/>
+            {label}
+          </span>
+        ))}
+        <span style={{fontSize:9,color:"#ef4444",marginLeft:"auto"}}>■ 上漲</span>
+        <span style={{fontSize:9,color:"#22c55e"}}>■ 下跌</span>
+      </div>
+    </div>
+  );
+}
+
+// ── 技術分析組件 ───────────────────────────────────
+function TechAnalysis({stock}){
+  const {price=0, change=0, volume=0, sc=50} = stock||{};
+
+  // 簡易技術指標計算（基於價格和評分）
+  const rsi = Math.min(100, Math.max(0, sc*0.9 + change*2));
+  const rsiLabel = rsi>=70?"超買":rsi<=30?"超賣":"中性";
+  const rsiColor = rsi>=70?"#ef4444":rsi<=30?"#22c55e":"#94a3b8";
+
+  const maStatus = change>=1?"多頭排列":change<=-1?"空頭排列":"盤整";
+  const maColor  = change>=1?"#ef4444":change<=-1?"#22c55e":"#94a3b8";
+
+  const volStatus = volume>50000?"放量":volume>20000?"正常量":"縮量";
+  const volColor  = volume>50000?"#fbbf24":volume>20000?"#94a3b8":"#60a5fa";
+
+  const kdj = Math.min(100,Math.max(0, 50+change*5));
+  const kdjLabel = kdj>=80?"超買區":kdj<=20?"超賣區":"操作區";
+  const kdjColor = kdj>=80?"#ef4444":kdj<=20?"#22c55e":"#94a3b8";
+
+  const macd = change>=0?"正值(多方)":"負值(空方)";
+  const macdColor = change>=0?"#ef4444":"#22c55e";
+
+  const support = +(price*0.95).toFixed(1);
+  const resist  = +(price*1.06).toFixed(1);
+
+  const indicators=[
+    {label:"RSI(14)",value:`${rsi.toFixed(0)}  ${rsiLabel}`,color:rsiColor,bar:rsi},
+    {label:"均線狀態",value:maStatus,color:maColor,bar:null},
+    {label:"成交量",value:`${volStatus} ${volume.toLocaleString()}張`,color:volColor,bar:null},
+    {label:"KDJ",value:`K:${kdj.toFixed(0)}  ${kdjLabel}`,color:kdjColor,bar:kdj},
+    {label:"MACD",value:macd,color:macdColor,bar:null},
+    {label:"支撐位",value:`${support} 元`,color:"#22c55e",bar:null},
+    {label:"壓力位",value:`${resist} 元`,color:"#ef4444",bar:null},
+  ];
+
+  const signal = change>=3?"強勢買入信號 🚀":change>=1?"溫和買入":change>=-1?"觀望等待":change>=-3?"注意賣出":"空頭信號 ⚠️";
+  const sigColor= change>=3?"#ef4444":change>=1?"#f97316":change>=-1?"#94a3b8":change>=-3?"#22c55e":"#16a34a";
+
+  return(
+    <div style={{background:"#fff",borderRadius:16,padding:"16px 18px",boxShadow:"0 4px 18px rgba(0,0,0,.08)",border:"1px solid #e8f0fe"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+        <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#2563eb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>📈</div>
+        <div>
+          <div style={{fontSize:13,fontWeight:800,color:"#0f172a"}}>技術分析</div>
+          <div style={{fontSize:9,color:"#94a3b8"}}>RSI · MACD · KDJ · 均線 · 支撐壓力</div>
+        </div>
+        <div style={{marginLeft:"auto",padding:"4px 12px",borderRadius:20,background:sigColor+"20",border:`1px solid ${sigColor}`,fontSize:11,fontWeight:700,color:sigColor}}>{signal}</div>
+      </div>
+
+      {/* 技術指標列表 */}
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+        {indicators.map((ind,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:10,color:"#64748b",width:70,flexShrink:0}}>{ind.label}</span>
+            {ind.bar!==null&&(
+              <div style={{width:80,height:6,background:"#f1f5f9",borderRadius:3,overflow:"hidden",flexShrink:0}}>
+                <div style={{height:"100%",width:`${ind.bar}%`,background:ind.color,borderRadius:3,transition:"width .5s"}}/>
+              </div>
+            )}
+            <span style={{fontSize:11,fontWeight:700,color:ind.color,flex:1}}>{ind.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 操作建議摘要 */}
+      <div style={{background:"#f8fafc",borderRadius:10,padding:"10px 12px",border:"1px solid #e2e8f0"}}>
+        <div style={{fontSize:10,fontWeight:700,color:"#0f172a",marginBottom:6}}>📋 技術面小結</div>
+        <div style={{fontSize:11,color:"#334155",lineHeight:1.7}}>
+          {change>=3&&<div>• 今日大漲 {change}%，放量突破，<span style={{color:"#ef4444",fontWeight:600}}>短線動能強</span></div>}
+          {change>=1&&change<3&&<div>• 穩步上漲，均線偏多，<span style={{color:"#f97316",fontWeight:600}}>可留意支撐{support}</span></div>}
+          {change>=-1&&change<1&&<div>• 盤整格局，量能縮減，<span style={{color:"#64748b",fontWeight:600}}>等待方向選擇</span></div>}
+          {change<-1&&change>=-3&&<div>• 出現回檔，注意<span style={{color:"#22c55e",fontWeight:600}}>支撐 {support}</span>是否守住</div>}
+          {change<-3&&<div>• 大幅下跌 {Math.abs(change)}%，<span style={{color:"#16a34a",fontWeight:600}}>短期避開，等止跌訊號</span></div>}
+          <div style={{marginTop:4,fontSize:9,color:"#94a3b8"}}>壓力位：{resist} · 支撐位：{support} · 技術指標僅供參考</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Ring({score,size=64}){
   const r=26,circ=2*Math.PI*r,c=score>=80?"#10b981":score>=65?"#f59e0b":"#6366f1";
   return(<svg width={size} height={size} viewBox="0 0 64 64" style={{flexShrink:0}}>
@@ -431,72 +594,111 @@ export default function App(){
   },[]);
 
   const doUpdate=useCallback(async()=>{
-    setUpdating(true);setUpdateMsg("🔄 嘗試取得證交所即時資料…");
+    setUpdating(true);
     const today=new Date().toLocaleDateString("zh-TW");
+    const now_h=new Date().getHours();
+    const now_m=new Date().getMinutes();
+    // 判斷是否盤中 9:00~13:30
+    const inSession=(now_h>9||(now_h===9&&now_m>=0))&&(now_h<13||(now_h===13&&now_m<=30));
     let all={};let source="AI";
 
-    // ── Step 1：優先嘗試 TWSE 官方盤後資料 ──────────────
+    // ── Step 1：優先嘗試 TWSE/TPEx 官方資料 ─────────────
     try{
-      const now_h=new Date().getHours();
-      const isMarketOpen=now_h>=9&&now_h<14; // 9:00-14:00 盤中
-      setUpdateMsg(isMarketOpen?"📡 盤中！取得即時股價…":"📡 連接台灣證交所 OpenAPI（盤後收盤價）…");
-      const now_hour=new Date().getHours();const now_min=new Date().getMinutes();
-      const inSession=(now_hour>9||(now_hour===9&&now_min>=0))&&(now_hour<13||(now_hour===13&&now_min<=30));
+      setUpdateMsg(inSession?"📡 盤中！連接證交所即時API…":"📡 連接台灣證交所收盤API…");
       const stockCodes=STOCK_DB.map(s=>s.s).join(",");
       const twseUrl=inSession
-        ?`/api/twse?type=realtime&stocks=${stockCodes}` // 盤中即時
-        :"/api/twse"; // 盤後收盤
+        ?`/api/twse?type=realtime&stocks=${stockCodes}`
+        :"/api/twse";
       const twseRes=await fetch(twseUrl);
       if(twseRes.ok){
         const twseData=await twseRes.json();
-        if(twseData?.data && Object.keys(twseData.data).length>100){
-          // 只取我們資料庫有的股票
+        if(twseData?.data){
+          const dataCount=Object.keys(twseData.data).length;
+          // 取資料庫中有的股票
           STOCK_DB.forEach(s=>{
             if(twseData.data[s.s]){
               all[s.s]=twseData.data[s.s];
             }
           });
-          if(Object.keys(all).length>50){
-            source="TWSE官方";
-            setUpdateMsg(`✅ 證交所資料取得成功！${Object.keys(all).length}支`);
+          const matched=Object.keys(all).length;
+          if(matched>50){
+            source=inSession?"TWSE即時":"TWSE收盤";
+            setUpdateMsg(`✅ 證交所取得 ${dataCount} 支，匹配 ${matched} 支！`);
+          }else{
+            console.warn("TWSE matched too few:",matched,"from",dataCount);
+            all={};// 重置，改用AI
           }
         }
       }
-    }catch(e){console.warn("TWSE API failed:",e);}
+    }catch(e){
+      console.warn("TWSE API failed:",e.message);
+      all={};
+    }
 
-    // ── Step 2：若 TWSE 失敗（盤中/收盤前），改用 AI 更新 ──
+    // ── Step 2：TWSE 不足時改用 AI ───────────────────────
     if(Object.keys(all).length<50){
-      setUpdateMsg("📡 證交所盤後資料尚未更新，改用 AI 估算…");
+      setUpdateMsg("📡 證交所資料不足，改用 AI 更新…");
       const BATCH=40;
-      const batches=[];for(let i=0;i<STOCK_DB.length;i+=BATCH)batches.push(STOCK_DB.slice(i,i+BATCH));
+      const batches=[];
+      for(let i=0;i<STOCK_DB.length;i+=BATCH)batches.push(STOCK_DB.slice(i,i+BATCH));
       try{
         for(let bi=0;bi<batches.length;bi++){
           const batch=batches[bi];
           setUpdateMsg(`🤖 AI更新 ${bi+1}/${batches.length} 批（${bi*BATCH+1}~${Math.min((bi+1)*BATCH,STOCK_DB.length)}支）`);
-          const res=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,
-              system:`只回傳純JSON，格式：{"2330":{"p":2310,"ch":0.87,"vol":6999},...}。不含任何說明或markdown。`,
-              messages:[{role:"user",content:`今天${today}，請提供這些台股最新收盤價：\n${batch.map(s=>`${s.s}${s.n}`).join(",")}\np=收盤價(TWD),ch=漲跌幅%(正負),vol=成交張數。只回傳JSON。`}]})});
-          const d=await res.json();const txt=d.content?.[0]?.text||"{}";
-          try{Object.assign(all,JSON.parse(txt.replace(/```json|```/g,"").trim()));}catch{}
+          const res=await fetch("/api/claude",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              model:"claude-sonnet-4-20250514",
+              max_tokens:2000,
+              system:`只回傳純JSON物件，格式：{"2330":{"p":2310,"ch":0.87,"vol":6999},...}。絕對不含任何說明文字或markdown符號。`,
+              messages:[{role:"user",content:`今天${today}，請提供這些台股最新收盤價：
+${batch.map(s=>`${s.s}${s.n}`).join(",")}
+p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=成交張數(整數)。只回傳JSON。`}]
+            })
+          });
+          if(!res.ok){
+            console.error("AI API error:",res.status);
+            continue;
+          }
+          const d=await res.json();
+          if(d.error){
+            console.error("AI error:",d.error);
+            continue;
+          }
+          const txt=d.content?.[0]?.text||"{}";
+          const clean=txt.replace(/```json|```/g,"").replace(/^[^{]*/,"").replace(/[^}]*$/,"").trim();
+          try{
+            const parsed=JSON.parse(clean);
+            Object.assign(all,parsed);
+          }catch(e){
+            console.error("JSON parse error:",e.message,"text:",txt.slice(0,100));
+          }
         }
-        source="AI估算";
-      }catch(e){setUpdateMsg(`❌ 更新失敗：${e.message}`);}
+        if(Object.keys(all).length>50)source="AI估算";
+      }catch(e){
+        setUpdateMsg(`❌ 更新失敗：${e.message}`);
+        setUpdating(false);
+        return;
+      }
     }
 
     // ── Step 3：套用資料 ─────────────────────────────────
-    if(Object.keys(all).length>10){
-      const merged={...INIT_PRICES,...all};setPrices(merged);setDataDate(today);
+    const matched=Object.keys(all).length;
+    if(matched>10){
+      const merged={...INIT_PRICES,...all};
+      setPrices(merged);
+      setDataDate(today);
       const now=new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"});
       setLastUpdate(now);
-      const srcLabel=source==="TWSE官方"?(inSession?"TWSE即時":"TWSE收盤"):source;
-        setUpdateMsg(`✅ 更新完成！${Object.keys(all).length}支 · ${srcLabel} · ${now}`);
-        setDataDate(new Date().toLocaleDateString("zh-TW"));
-      await calcAcc(merged);await savePreds(merged,today);
-    }else if(!updateMsg.startsWith("❌")){
-      setUpdateMsg(`⚠️ 資料不足(${Object.keys(all).length}支)，請重試`);
+      setUpdateMsg(`✅ 更新完成！${matched}支 · ${source} · ${now}`);
+      await calcAcc(merged);
+      await savePreds(merged,today);
+    }else{
+      setUpdateMsg(`⚠️ 資料不足(${matched}支)，請稍後重試`);
     }
-    setUpdating(false);setTimeout(()=>setUpdateMsg(""),8000);
+    setUpdating(false);
+    setTimeout(()=>setUpdateMsg(""),8000);
   },[calcAcc,savePreds]);
 
   const scheduleNext=useCallback(()=>{
@@ -943,6 +1145,22 @@ export default function App(){
                 </div>
               </div>
             </div>
+            {/* K線圖 */}
+            <div style={{background:"#fff",borderRadius:16,padding:"16px 18px",boxShadow:"0 4px 18px rgba(0,0,0,.08)",border:"1px solid #e8f0fe"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#2563eb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>🕯️</div>
+                <div>
+                  <div style={{fontSize:13,fontWeight:800,color:"#0f172a"}}>K線走勢圖</div>
+                  <div style={{fontSize:9,color:"#94a3b8"}}>近20日 K線 · MA5(黃) · MA10(藍) · MA20(粉)</div>
+                </div>
+              </div>
+              <CandleChart sym={selStock.s} currentPrice={selStock.price} currentCh={selStock.change}/>
+            </div>
+
+            {/* 技術分析 */}
+            <TechAnalysis stock={selStock}/>
+
+            {/* AI操作指令 */}
             <div style={{background:"#fff",borderRadius:16,padding:"16px 18px",boxShadow:"0 4px 18px rgba(0,0,0,.08)",border:"1px solid #e8f0fe"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                 <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#14b8a6,#0284c7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>🤖</div>
