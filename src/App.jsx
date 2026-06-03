@@ -437,8 +437,16 @@ export default function App(){
 
     // ── Step 1：優先嘗試 TWSE 官方盤後資料 ──────────────
     try{
-      setUpdateMsg("📡 連接台灣證交所 OpenAPI…");
-      const twseRes=await fetch("/api/twse");
+      const now_h=new Date().getHours();
+      const isMarketOpen=now_h>=9&&now_h<14; // 9:00-14:00 盤中
+      setUpdateMsg(isMarketOpen?"📡 盤中！取得即時股價…":"📡 連接台灣證交所 OpenAPI（盤後收盤價）…");
+      const now_hour=new Date().getHours();const now_min=new Date().getMinutes();
+      const inSession=(now_hour>9||(now_hour===9&&now_min>=0))&&(now_hour<13||(now_hour===13&&now_min<=30));
+      const stockCodes=STOCK_DB.map(s=>s.s).join(",");
+      const twseUrl=inSession
+        ?`/api/twse?type=realtime&stocks=${stockCodes}` // 盤中即時
+        :"/api/twse"; // 盤後收盤
+      const twseRes=await fetch(twseUrl);
       if(twseRes.ok){
         const twseData=await twseRes.json();
         if(twseData?.data && Object.keys(twseData.data).length>100){
@@ -481,7 +489,9 @@ export default function App(){
       const merged={...INIT_PRICES,...all};setPrices(merged);setDataDate(today);
       const now=new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"});
       setLastUpdate(now);
-      setUpdateMsg(`✅ 更新完成！${Object.keys(all).length}支 · ${source} · ${now}`);
+      const srcLabel=source==="TWSE官方"?(inSession?"TWSE即時":"TWSE收盤"):source;
+        setUpdateMsg(`✅ 更新完成！${Object.keys(all).length}支 · ${srcLabel} · ${now}`);
+        setDataDate(new Date().toLocaleDateString("zh-TW"));
       await calcAcc(merged);await savePreds(merged,today);
     }else if(!updateMsg.startsWith("❌")){
       setUpdateMsg(`⚠️ 資料不足(${Object.keys(all).length}支)，請重試`);
@@ -559,7 +569,7 @@ export default function App(){
             <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#14b8a6,#0284c7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:"#fff",boxShadow:"0 3px 10px rgba(20,184,166,.5)"}}>台</div>
             <div>
               <div style={{fontSize:13,fontWeight:800,color:"#f0fdfa",lineHeight:1.2}}>台股 AI 操作指令</div>
-              <div style={{fontSize:9,color:"#5eead4"}}>{STOCK_DB.length}支·{dataDate}{lastUpdate?` 更新${lastUpdate}`:""}</div>
+              <div style={{fontSize:9,color:"#5eead4"}}>{STOCK_DB.length}支 · 收盤：{dataDate}{lastUpdate?` 更新${lastUpdate}`:""}</div>
             </div>
           </div>
           <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
@@ -588,7 +598,7 @@ export default function App(){
         <div style={{overflow:"hidden",flex:1}}>
           <div style={{display:"inline-flex",animation:"scroll-left 80s linear infinite",whiteSpace:"nowrap"}}>
             {[...ticker,...ticker].map((s,i)=>(
-              <span key={i} style={{fontSize:9,color:s.change>=0?"#34d399":"#f87171",padding:"0 12px",borderRight:"1px solid #1e3a4a"}}>
+              <span key={i} style={{fontSize:9,color:s.change>=0?"#ff6666":"#4ade80",padding:"0 12px",borderRight:"1px solid #1e3a4a"}}>
                 {s.s} {s.n} {s.price} {s.change>=0?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%
               </span>
             ))}
@@ -729,8 +739,8 @@ export default function App(){
                           <div style={{fontSize:9,color:"#94a3b8"}}>{s.cat}·{s.role}</div>
                         </div>
                         <div style={{textAlign:"right",flexShrink:0}}>
-                          <div style={{fontSize:14,fontWeight:800,color:pos?"#059669":"#dc2626"}}>{s.price||"-"}</div>
-                          <div style={{fontSize:10,color:pos?"#059669":"#dc2626"}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</div>
+                          <div style={{fontSize:14,fontWeight:800,color:pos?"#e00000":"#16a34a"}}>{s.price||"-"}</div>
+                          <div style={{fontSize:10,color:pos?"#e00000":"#16a34a"}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</div>
                         </div>
                       </div>
                     );})}
@@ -772,7 +782,7 @@ export default function App(){
                                 <div style={{fontSize:9,color:"#94a3b8"}}>{s.role}</div>
                               </div>
                               <div style={{textAlign:"right",marginRight:8}}>
-                                {q.p?<><div style={{fontSize:13,fontWeight:800,color:pos?"#059669":"#dc2626"}}>{q.p}</div><div style={{fontSize:9,color:pos?"#059669":"#dc2626"}}>{pos?"▲":"▼"}{Math.abs(q.ch||0).toFixed(2)}%</div></>:<div style={{fontSize:9,color:"#cbd5e1"}}>—</div>}
+                                {q.p?<><div style={{fontSize:13,fontWeight:800,color:pos?"#e00000":"#16a34a"}}>{q.p}</div><div style={{fontSize:9,color:pos?"#e00000":"#16a34a"}}>{pos?"▲":"▼"}{Math.abs(q.ch||0).toFixed(2)}%</div></>:<div style={{fontSize:9,color:"#cbd5e1"}}>—</div>}
                               </div>
                               <span style={{fontSize:9,padding:"2px 7px",borderRadius:7,background:adv.bg,color:adv.c,border:`1px solid ${adv.bd}`,fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>{adv.icon}{adv.trade}</span>
                             </div>
@@ -824,8 +834,8 @@ export default function App(){
                             <div style={{fontSize:9,color:"#64748b",fontWeight:600}}>{s.s}</div>
                             <div style={{fontSize:8,color:"#94a3b8",marginBottom:4,maxWidth:110,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.role}</div>
                             <div style={{display:"flex",alignItems:"baseline",gap:5}}>
-                              <span style={{fontSize:18,fontWeight:900,color:pos?"#059669":"#dc2626"}}>{s.price||"—"}</span>
-                              <span style={{fontSize:10,color:pos?"#059669":"#dc2626",fontWeight:700}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</span>
+                              <span style={{fontSize:18,fontWeight:900,color:pos?"#e00000":"#16a34a"}}>{s.price||"—"}</span>
+                              <span style={{fontSize:10,color:pos?"#e00000":"#16a34a",fontWeight:700}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</span>
                             </div>
                           </div>
                           <Ring score={s.sc} size={54}/>
@@ -869,8 +879,8 @@ export default function App(){
                       <div style={{fontSize:8,color:"#94a3b8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.cat}</div>
                     </div>
                     <div style={{fontSize:10,color:"#475569",fontWeight:700}}>{s.s}</div>
-                    <div style={{textAlign:"right",fontSize:13,fontWeight:800,color:pos?"#059669":"#dc2626",paddingRight:4}}>{s.price||"-"}</div>
-                    <div style={{textAlign:"right",fontSize:10,fontWeight:700,color:pos?"#059669":"#dc2626",paddingRight:3}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</div>
+                    <div style={{textAlign:"right",fontSize:13,fontWeight:800,color:pos?"#e00000":"#16a34a",paddingRight:4}}>{s.price||"-"}</div>
+                    <div style={{textAlign:"right",fontSize:10,fontWeight:700,color:pos?"#e00000":"#16a34a",paddingRight:3}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</div>
                     <div style={{textAlign:"right",fontSize:9,color:"#64748b",paddingRight:3}}>{Number(s.volume||0).toLocaleString()}</div>
                     <div style={{textAlign:"center",paddingRight:2}}>
                       <span style={{fontSize:9,padding:"2px 5px",borderRadius:6,background:s.adv.bg,color:s.adv.c,border:`1px solid ${s.adv.bd}`,fontWeight:700,whiteSpace:"nowrap"}}>{s.adv.icon} {s.adv.tag}</span>
@@ -893,7 +903,7 @@ export default function App(){
                 ))}
               </div>
             </div>
-            <div style={{marginTop:6,fontSize:9,color:"#94a3b8",textAlign:"center"}}>⚠️ AI生成，僅供參考，不構成投資建議。每日PM4:00自動更新，或按右上角「🔄 立即更新」手動更新。</div>
+            <div style={{marginTop:6,fontSize:9,color:"#94a3b8",textAlign:"center"}}>⚠️ AI生成，僅供參考，不構成投資建議。股價為 <span style={{color:"#fbbf24",fontWeight:600}}>{dataDate} 收盤價</span>，每日PM4:00自動更新，或按「🔄 立即更新」手動更新。</div>
           </div>
         </>
       )}
@@ -917,13 +927,13 @@ export default function App(){
                   </div>
                   <div style={{fontSize:20,fontWeight:900,color:"#f0fdfa"}}>{selStock.n} <span style={{fontSize:13,color:"#7dd3fc",fontWeight:400}}>({selStock.s})</span></div>
                   <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:8}}>
-                    <span style={{fontSize:30,fontWeight:900,color:selPos?"#4ade80":"#f87171"}}>{selStock.price||"—"}</span>
+                    <span style={{fontSize:30,fontWeight:900,color:selPos?"#ff4444":"#4ade80"}}>{selStock.price||"—"}</span>
                     <span style={{fontSize:12,color:"#7dd3fc"}}>TWD</span>
-                    <span style={{fontSize:14,fontWeight:700,padding:"2px 10px",borderRadius:7,background:selPos?"rgba(74,222,128,.15)":"rgba(248,113,113,.15)",color:selPos?"#4ade80":"#f87171"}}>
+                    <span style={{fontSize:14,fontWeight:700,padding:"2px 10px",borderRadius:7,background:selPos?"rgba(220,0,0,.15)":"rgba(74,222,128,.15)",color:selPos?"#ff4444":"#4ade80"}}>
                       {selPos?"▲":"▼"}{Math.abs(selStock.change??0).toFixed(2)}%
                     </span>
                   </div>
-                  <div style={{fontSize:9,color:"#5eead4",marginTop:3}}>成交 {Number(selStock.volume||0).toLocaleString()} 張 · {dataDate}</div>
+                  <div style={{fontSize:9,color:"#5eead4",marginTop:3}}>成交 {Number(selStock.volume||0).toLocaleString()} 張 · <span style={{color:"#fbbf24",fontWeight:600}}>收盤日期：{dataDate}</span></div>
                 </div>
                 <div style={{textAlign:"center",background:selStock.adv.bg,borderRadius:12,padding:"12px 16px",border:`2px solid ${selStock.adv.bd}`,minWidth:120}}>
                   <div style={{fontSize:20}}>{selStock.adv.icon}</div>
