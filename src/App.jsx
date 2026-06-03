@@ -331,11 +331,10 @@ export default function App(){
     await stoSave(`pred:${today}`,pred);setPredictions(prev=>({...prev,[today]:pred}));
   },[]);
 
-  // 模擬測試：用今日資料當「昨日預測」，人為製造可比對的資料
+  // 模擬/即時計算準確率（用今日資料馬上顯示）
   const runMockTest=useCallback(async()=>{
     setAccLoading(true);
     const today=new Date().toLocaleDateString("zh-TW");
-    // 儲存今日當作「昨日預測」
     const pred={};
     STOCK_DB.forEach(s=>{
       const q=prices[s.s];
@@ -344,27 +343,69 @@ export default function App(){
         pred[s.s]={sc,predUp:sc>=55,price:q.p,ch:q.ch,name:s.n};
       }
     });
-    // 計算「如果昨天就是今天的預測，準確率是多少」
+    // 同時儲存今日預測（供明日比對）
+    try{
+      const str=JSON.stringify(pred);
+      localStorage.setItem("pred:"+today,str);
+      try{await window.storage.set("pred:"+today,str);}catch{}
+    }catch{}
+    setPredictions(prev=>({...prev,[today]:pred}));
+
+    // 即時計算：用今日評分預測方向 vs 今日實際漲跌
     let ok=0,total=0;
     const stkAcc={};
     Object.entries(pred).forEach(([sym,p])=>{
-      const q=prices[sym];if(!q?.ch)return;
+      const q=prices[sym];if(!q||q.ch===undefined)return;
       const actualUp=q.ch>0;
       const correct=p.predUp===actualUp;
       if(correct)ok++;total++;
       if(!stkAcc[sym])stkAcc[sym]={name:p.name,ok:0,total:0};
-      stkAcc[sym].ok+=(correct?1:0);stkAcc[sym].total++;
+      stkAcc[sym].ok+=(correct?1:0);
+      stkAcc[sym].total++;
     });
-    const list=Object.entries(stkAcc)
+
+    // 也嘗試從 localStorage 讀取歷史資料
+    const dayRes=[];
+    const allStkAcc={...stkAcc};
+    let allOk=ok,allTotal=total;
+    try{
+      const histKeys=Object.keys(localStorage)
+        .filter(k=>k.startsWith("pred:")&&k!=="pred:"+today)
+        .sort().slice(-6);
+      for(const key of histKeys){
+        const dayPred=JSON.parse(localStorage.getItem(key)||"{}");
+        let dOk=0,dAll=0;
+        Object.entries(dayPred).forEach(([sym,p])=>{
+          const q=prices[sym];if(!q||q.ch===undefined)return;
+          const actualUp=q.ch>0;
+          const correct=p.predUp===actualUp;
+          if(correct)dOk++;dAll++;allOk+=(correct?1:0);allTotal++;
+          if(!allStkAcc[sym])allStkAcc[sym]={name:p.name,ok:0,total:0};
+          allStkAcc[sym].ok+=(correct?1:0);allStkAcc[sym].total++;
+        });
+        if(dAll>0)dayRes.push({
+          date:key.replace("pred:",""),
+          ok:dOk,total:dAll,
+          rate:+((dOk/dAll)*100).toFixed(1)
+        });
+      }
+    }catch{}
+
+    // 加入今日
+    if(total>0)dayRes.push({date:today+"(今日)",ok,total,rate:+((ok/total)*100).toFixed(1)});
+
+    const list=Object.entries(allStkAcc)
       .filter(([,v])=>v.total>=1)
       .map(([sym,v])=>({sym,name:v.name,rate:+((v.ok/v.total)*100).toFixed(1),ok:v.ok,total:v.total}))
       .sort((a,b)=>b.rate-a.rate);
+
     setAccuracy({
-      overall:total>0?+((ok/total)*100).toFixed(1):null,
-      totOk:ok,totAll:total,
-      days:[{date:today+"(模擬)",ok,total,rate:+((ok/total)*100).toFixed(1)}],
-      best:list.slice(0,5),worst:list.slice(-5).reverse(),
-      isMock:true
+      overall:allTotal>0?+((allOk/allTotal)*100).toFixed(1):null,
+      totOk:allOk,totAll:allTotal,
+      days:dayRes.slice(-7),
+      best:list.slice(0,5),
+      worst:list.slice(-5).reverse(),
+      isMock:false
     });
     setAccLoading(false);
   },[prices]);
@@ -561,7 +602,7 @@ export default function App(){
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
               <span style={{fontSize:15,fontWeight:800,color:"#fbbf24"}}>📊 AI 預測準確率{accuracy?.isMock?" (模擬測試)":""}</span>
               <span style={{fontSize:9,color:"#4a6080"}}>每日更新後自動比對昨日預測 vs 今日實際漲跌</span>
-              <button onClick={()=>calcAcc({...INIT_PRICES,...prices})} disabled={accLoading} style={{marginLeft:"auto",background:"rgba(251,191,36,.15)",border:"1px solid #fbbf24",borderRadius:7,padding:"3px 10px",color:"#fbbf24",fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              <button onClick={()=>runMockTest()} disabled={accLoading} style={{marginLeft:"auto",background:"rgba(251,191,36,.15)",border:"1px solid #fbbf24",borderRadius:7,padding:"3px 10px",color:"#fbbf24",fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
                 {accLoading?<><Spin size={10} color="#fbbf24"/>計算中</>:"🔄 重算"}
               </button>
               <button onClick={()=>setAccView(false)} style={{background:"none",border:"none",color:"#4a6080",cursor:"pointer",fontSize:18}}>✕</button>
