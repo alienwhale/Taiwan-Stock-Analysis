@@ -664,6 +664,7 @@ export default function App(){
     let all={};let source="AI";
 
     // ── Step 1：優先嘗試 TWSE/TPEx 官方資料 ─────────────
+    let twseDataDate = ''; // API 回傳的真實資料日期
     try{
       setUpdateMsg(inSession?"📡 盤中！連接證交所即時API…":"📡 連接台灣證交所收盤API…");
       const stockCodes=STOCK_DB.map(s=>s.s).join(",");
@@ -675,19 +676,19 @@ export default function App(){
         const twseData=await twseRes.json();
         if(twseData?.data){
           const dataCount=Object.keys(twseData.data).length;
-          // 取資料庫中有的股票
           STOCK_DB.forEach(s=>{
-            if(twseData.data[s.s]){
-              all[s.s]=twseData.data[s.s];
-            }
+            if(twseData.data[s.s]) all[s.s]=twseData.data[s.s];
           });
           const matched=Object.keys(all).length;
           if(matched>50){
-            source=inSession?"TWSE即時":"TWSE收盤";
-            setUpdateMsg(`✅ 證交所取得 ${dataCount} 支，匹配 ${matched} 支！`);
+            // 使用 API 回傳的真實日期（不是今天的日期！）
+            twseDataDate = twseData.dataDate || '';
+            const dateLabel = twseData.dateLabel || twseDataDate;
+            source=inSession?"TWSE即時":`TWSE收盤`;
+            setUpdateMsg(`✅ 證交所取得 ${dataCount} 支，匹配 ${matched} 支 · ${dateLabel}`);
           }else{
             console.warn("TWSE matched too few:",matched,"from",dataCount);
-            all={};// 重置，改用AI
+            all={};
           }
         }
       }
@@ -749,12 +750,16 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
     if(matched>10){
       const merged={...INIT_PRICES,...all};
       setPrices(merged);
-      setDataDate(today);
+      // 用 API 的真實日期，不是今天日期
+      const realDate = twseDataDate || today;
+      setDataDate(realDate);
       const now=new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"});
       setLastUpdate(now);
-      setUpdateMsg(`✅ 更新完成！${matched}支 · ${source} · 收盤日：${today} · ${now}`);
+      const isTodayData = realDate === today;
+      const dateNote = isTodayData ? "今日收盤" : `收盤日：${realDate}（非今日）`;
+      setUpdateMsg(`✅ 更新完成！${matched}支 · ${source} · ${dateNote} · ${now}`);
       await calcAcc(merged);
-      await savePreds(merged,today);
+      await savePreds(merged,realDate);
     }else{
       setUpdateMsg(`⚠️ 資料不足(${matched}支)，請稍後重試`);
     }
