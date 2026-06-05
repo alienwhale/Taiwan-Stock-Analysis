@@ -258,88 +258,149 @@ function Spark({prices=[],color="#14b8a6",h=36}){
 }
 // ── K線圖組件（近20日）─────────────────────────────
 function CandleChart({sym, currentPrice, currentCh}){
-  // 用當前價格+漲跌幅模擬近20日K線資料
-  const W=320, H=140, PAD=8;
-  const candles = React.useMemo(()=>{
-    if(!currentPrice||currentPrice===0)return[];
-    const seed=sym?sym.split('').reduce((a,c)=>a+c.charCodeAt(0),0):42;
-    const data=[];
-    let price=currentPrice*(1-currentCh/100);
-    for(let i=0;i<20;i++){
-      const rng=(((seed*i*7+13)%100)/100-0.48)*0.04;
-      const open=price;
-      const close=price*(1+rng);
-      const high=Math.max(open,close)*(1+(((seed*i*3+7)%100)/100)*0.012);
-      const low=Math.min(open,close)*(1-(((seed*i*5+11)%100)/100)*0.012);
-      data.push({o:+open.toFixed(1),c:+close.toFixed(1),h:+high.toFixed(1),l:+low.toFixed(1),up:close>=open});
-      price=close;
+  const [candles, setCandles] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [dataFrom, setDataFrom] = React.useState('');
+
+  React.useEffect(()=>{
+    if(!sym) return;
+    setLoading(true);
+    setCandles([]);
+
+    function buildFallback(){
+      if(!currentPrice || currentPrice===0){ setCandles([]); return; }
+      const seed = sym.split('').reduce((a,ch)=>a+ch.charCodeAt(0),0);
+      const data = [];
+      let price = currentPrice*(1 - currentCh/100);
+      for(let i=0; i<25; i++){
+        const rng = (((seed*i*7+13)%100)/100 - 0.48)*0.035;
+        const open = price;
+        const close = price*(1+rng);
+        const high = Math.max(open,close)*(1+(((seed*i*3+7)%100)/100)*0.01);
+        const low  = Math.min(open,close)*(1-(((seed*i*5+11)%100)/100)*0.01);
+        const d = new Date(); d.setDate(d.getDate()-(25-i)*1.4);
+        data.push({date:`${d.getMonth()+1}/${d.getDate()}`,o:+open.toFixed(1),c:+close.toFixed(1),h:+high.toFixed(1),l:+low.toFixed(1),up:close>=open});
+        price = close;
+      }
+      const t = new Date();
+      const lo = currentPrice*(1-currentCh/100*0.6);
+      data[24]={date:`${t.getMonth()+1}/${t.getDate()}`,o:+lo.toFixed(1),c:currentPrice,h:+(currentPrice*1.005).toFixed(1),l:+(lo*0.995).toFixed(1),up:currentCh>=0};
+      setCandles(data);
+      setDataFrom('模擬');
     }
-    // 最後一根用真實資料
-    const lastClose=currentPrice;
-    const lastOpen=currentPrice*(1-currentCh/100*0.6);
-    data[19]={o:+lastOpen.toFixed(1),c:lastClose,h:+(lastClose*1.005).toFixed(1),l:+(lastOpen*0.995).toFixed(1),up:currentCh>=0};
-    return data;
-  },[sym,currentPrice,currentCh]);
 
-  if(!candles.length)return <div style={{height:H,background:"#f8fafc",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"#94a3b8",fontSize:12}}>載入中…</div>;
+    fetch(`/api/twse?type=history&stock=${sym}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if(data?.data?.length >= 5){
+          setCandles(data.data.slice(-30).map(d=>({
+            date: d.date.slice(5),  // 只顯示 MM/DD
+            o:d.open, c:d.close, h:d.high, l:d.low, vol:d.vol,
+            up: d.close >= d.open
+          })));
+          setDataFrom('TWSE官方');
+        } else {
+          buildFallback();
+        }
+        setLoading(false);
+      })
+      .catch(()=>{ buildFallback(); setLoading(false); });
+  },[sym, currentPrice, currentCh]);
 
-  const prices=[...candles.flatMap(c=>[c.h,c.l])];
-  const mn=Math.min(...prices),mx=Math.max(...prices),rng=mx-mn||1;
-  const toY=p=>PAD+(H-2*PAD)*(1-(p-mn)/rng);
-  const cW=(W-2*PAD)/20;
+  const W=360, PL=42, PR=8, PT=10, PB=28, H=185;
+  const iW=W-PL-PR, iH=H-PT-PB;
 
-  // MA5, MA10, MA20
-  const closes=candles.map(c=>c.c);
-  const ma=(arr,n)=>arr.map((_,i)=>i<n-1?null:arr.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n);
-  const ma5=ma(closes,5),ma10=ma(closes,10),ma20=ma(closes,20);
-  const maLine=(maArr,color)=>{
-    const pts=maArr.map((v,i)=>v?`${PAD+i*cW+cW/2},${toY(v)}`:null).filter(Boolean);
-    if(pts.length<2)return null;
-    return <polyline key={color} points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.2" strokeLinejoin="round" opacity="0.8"/>;
+  if(loading) return(
+    <div style={{height:H,background:"#0f172a",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"#4a6080",fontSize:13}}>
+      載入歷史K線中…
+    </div>
+  );
+  if(!candles.length) return(
+    <div style={{height:H,background:"#0f172a",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"#4a6080",fontSize:13}}>
+      無資料
+    </div>
+  );
+
+  const allP = candles.flatMap(cd=>[cd.h,cd.l]);
+  const mn=Math.min(...allP), mx=Math.max(...allP), rng=mx-mn||1;
+  const toY = p => PT + iH*(1-(p-mn)/rng);
+  const cW = iW/candles.length;
+
+  // Y軸刻度 5格
+  const yTicks = Array.from({length:6},(_,i)=>mn+rng*(i/5));
+
+  // MA線
+  const cls = candles.map(cd=>cd.c);
+  const ma = (arr,n) => arr.map((_,i)=>i<n-1?null:arr.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n);
+  const [ma5,ma10,ma20] = [ma(cls,5),ma(cls,10),ma(cls,20)];
+  const maLine = (arr,color) => {
+    const pts = arr.map((v,i)=>v?`${PL+i*cW+cW/2},${toY(v)}`:null).filter(Boolean);
+    return pts.length<2?null:<polyline key={color} points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" opacity="0.9"/>;
   };
+
+  // X軸：每5根一個標籤
+  const xLabels = candles.map((cd,i)=>(i%5===0||i===candles.length-1)?{i,label:cd.date}:null).filter(Boolean);
 
   return(
     <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+        <span style={{fontSize:11,color:"#4a6080"}}>近{candles.length}交易日</span>
+        <span style={{fontSize:10,padding:"1px 8px",borderRadius:10,
+          background:dataFrom==="TWSE官方"?"rgba(16,185,129,.15)":"rgba(100,116,139,.15)",
+          color:dataFrom==="TWSE官方"?"#10b981":"#64748b"}}>
+          {dataFrom==="TWSE官方"?"✅ TWSE官方資料":"⚠️ 模擬資料"}
+        </span>
+      </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,display:"block",background:"#0f172a",borderRadius:8}}>
-        {/* 格線 */}
-        {[0.25,0.5,0.75].map(r=>(
-          <line key={r} x1={PAD} y1={PAD+(H-2*PAD)*r} x2={W-PAD} y2={PAD+(H-2*PAD)*r} stroke="#1e3a4a" strokeWidth="0.5"/>
+        {/* 背景格線 */}
+        {yTicks.map((v,i)=>(
+          <line key={i} x1={PL} y1={toY(v)} x2={W-PR} y2={toY(v)} stroke="#1e3a4a" strokeWidth="0.5"/>
         ))}
-        {/* K線 */}
+        {/* Y軸金額標籤（縱軸）*/}
+        {yTicks.map((v,i)=>(
+          <text key={i} x={PL-3} y={toY(v)+3} textAnchor="end" fill="#5a7a8a" fontSize="8">
+            {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(v<10?1:0)}
+          </text>
+        ))}
+        {/* X軸日期標籤（橫軸）*/}
+        {xLabels.map(({i,label})=>(
+          <text key={i} x={PL+i*cW+cW/2} y={H-4} textAnchor="middle" fill="#5a7a8a" fontSize="8">
+            {label}
+          </text>
+        ))}
+        {/* K線本體 */}
         {candles.map((cd,i)=>{
-          const x=PAD+i*cW+cW/2;
-          const bW=cW*0.6;
-          const color=cd.up?"#ef4444":"#22c55e";
+          const x = PL+i*cW+cW/2;
+          const bW = Math.max(cW*0.55, 2);
+          const color = cd.up?"#ef4444":"#22c55e";
           return(
             <g key={i}>
               <line x1={x} y1={toY(cd.h)} x2={x} y2={toY(cd.l)} stroke={color} strokeWidth="1"/>
               <rect x={x-bW/2} y={Math.min(toY(cd.o),toY(cd.c))}
-                width={bW} height={Math.max(Math.abs(toY(cd.o)-toY(cd.c)),1)}
+                width={bW} height={Math.max(Math.abs(toY(cd.o)-toY(cd.c)),1.5)}
                 fill={color} rx="0.5"/>
             </g>
           );
         })}
-        {/* MA線 */}
+        {/* MA均線 */}
         {maLine(ma5,"#fbbf24")}
         {maLine(ma10,"#60a5fa")}
         {maLine(ma20,"#f472b6")}
       </svg>
-      {/* 圖例 */}
-      <div style={{display:"flex",gap:12,padding:"4px 4px 0",flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:14,padding:"5px 2px 0",flexWrap:"wrap"}}>
         {[["MA5","#fbbf24"],["MA10","#60a5fa"],["MA20","#f472b6"]].map(([label,color])=>(
-          <span key={label} style={{fontSize:9,color,display:"flex",alignItems:"center",gap:3}}>
-            <span style={{display:"inline-block",width:16,height:2,background:color,borderRadius:1}}/>
+          <span key={label} style={{fontSize:11,color,display:"flex",alignItems:"center",gap:4}}>
+            <span style={{display:"inline-block",width:18,height:2,background:color,borderRadius:1}}/>
             {label}
           </span>
         ))}
-        <span style={{fontSize:9,color:"#ef4444",marginLeft:"auto"}}>■ 上漲</span>
-        <span style={{fontSize:9,color:"#22c55e"}}>■ 下跌</span>
+        <span style={{fontSize:11,color:"#ef4444",marginLeft:"auto"}}>■ 上漲</span>
+        <span style={{fontSize:11,color:"#22c55e",marginLeft:8}}>■ 下跌</span>
       </div>
     </div>
   );
 }
 
-// ── 技術分析組件 ───────────────────────────────────
 function TechAnalysis({stock}){
   const {price=0, change=0, volume=0, sc=50} = stock||{};
 
@@ -380,39 +441,39 @@ function TechAnalysis({stock}){
   return(
     <div style={{background:"#fff",borderRadius:16,padding:"16px 18px",boxShadow:"0 4px 18px rgba(0,0,0,.08)",border:"1px solid #e8f0fe"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-        <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#2563eb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>📈</div>
+        <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#2563eb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>📈</div>
         <div>
-          <div style={{fontSize:13,fontWeight:800,color:"#0f172a"}}>技術分析</div>
-          <div style={{fontSize:9,color:"#94a3b8"}}>RSI · MACD · KDJ · 均線 · 支撐壓力</div>
+          <div style={{fontSize:16,fontWeight:800,color:"#0f172a"}}>技術分析</div>
+          <div style={{fontSize:12,color:"#94a3b8"}}>RSI · MACD · KDJ · 均線 · 支撐壓力</div>
         </div>
-        <div style={{marginLeft:"auto",padding:"4px 12px",borderRadius:20,background:sigColor+"20",border:`1px solid ${sigColor}`,fontSize:11,fontWeight:700,color:sigColor}}>{signal}</div>
+        <div style={{marginLeft:"auto",padding:"4px 12px",borderRadius:20,background:sigColor+"20",border:`1px solid ${sigColor}`,fontSize:14,fontWeight:700,color:sigColor}}>{signal}</div>
       </div>
 
       {/* 技術指標列表 */}
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
         {indicators.map((ind,i)=>(
           <div key={i} style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:10,color:"#64748b",width:70,flexShrink:0}}>{ind.label}</span>
+            <span style={{fontSize:13,color:"#64748b",width:70,flexShrink:0}}>{ind.label}</span>
             {ind.bar!==null&&(
               <div style={{width:80,height:6,background:"#f1f5f9",borderRadius:3,overflow:"hidden",flexShrink:0}}>
                 <div style={{height:"100%",width:`${ind.bar}%`,background:ind.color,borderRadius:3,transition:"width .5s"}}/>
               </div>
             )}
-            <span style={{fontSize:11,fontWeight:700,color:ind.color,flex:1}}>{ind.value}</span>
+            <span style={{fontSize:14,fontWeight:700,color:ind.color,flex:1}}>{ind.value}</span>
           </div>
         ))}
       </div>
 
       {/* 操作建議摘要 */}
       <div style={{background:"#f8fafc",borderRadius:10,padding:"10px 12px",border:"1px solid #e2e8f0"}}>
-        <div style={{fontSize:10,fontWeight:700,color:"#0f172a",marginBottom:6}}>📋 技術面小結</div>
-        <div style={{fontSize:11,color:"#334155",lineHeight:1.7}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:6}}>📋 技術面小結</div>
+        <div style={{fontSize:14,color:"#334155",lineHeight:1.7}}>
           {change>=3&&<div>• 今日大漲 {change}%，放量突破，<span style={{color:"#ef4444",fontWeight:600}}>短線動能強</span></div>}
           {change>=1&&change<3&&<div>• 穩步上漲，均線偏多，<span style={{color:"#f97316",fontWeight:600}}>可留意支撐{support}</span></div>}
           {change>=-1&&change<1&&<div>• 盤整格局，量能縮減，<span style={{color:"#64748b",fontWeight:600}}>等待方向選擇</span></div>}
           {change<-1&&change>=-3&&<div>• 出現回檔，注意<span style={{color:"#22c55e",fontWeight:600}}>支撐 {support}</span>是否守住</div>}
           {change<-3&&<div>• 大幅下跌 {Math.abs(change)}%，<span style={{color:"#16a34a",fontWeight:600}}>短期避開，等止跌訊號</span></div>}
-          <div style={{marginTop:4,fontSize:9,color:"#94a3b8"}}>壓力位：{resist} · 支撐位：{support} · 技術指標僅供參考</div>
+          <div style={{marginTop:4,fontSize:12,color:"#94a3b8"}}>壓力位：{resist} · 支撐位：{support} · 技術指標僅供參考</div>
         </div>
       </div>
     </div>
@@ -691,7 +752,7 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
       setDataDate(today);
       const now=new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"});
       setLastUpdate(now);
-      setUpdateMsg(`✅ 更新完成！${matched}支 · ${source} · ${now}`);
+      setUpdateMsg(`✅ 更新完成！${matched}支 · ${source} · 收盤日：${today} · ${now}`);
       await calcAcc(merged);
       await savePreds(merged,today);
     }else{
@@ -770,19 +831,19 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
           <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>setView("home")}>
             <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#14b8a6,#0284c7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:"#fff",boxShadow:"0 3px 10px rgba(20,184,166,.5)"}}>台</div>
             <div>
-              <div style={{fontSize:13,fontWeight:800,color:"#f0fdfa",lineHeight:1.2}}>台股 AI 操作指令</div>
-              <div style={{fontSize:9,color:"#5eead4"}}>{STOCK_DB.length}支 · 收盤：{dataDate}{lastUpdate?` 更新${lastUpdate}`:""}</div>
+              <div style={{fontSize:16,fontWeight:800,color:"#f0fdfa",lineHeight:1.2}}>台股 AI 操作指令</div>
+              <div style={{fontSize:12,color:"#5eead4"}}>{STOCK_DB.length}支 · 收盤：{dataDate}{lastUpdate?` 更新${lastUpdate}`:""}</div>
             </div>
           </div>
           <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
-            <div style={{textAlign:"right",fontSize:8,color:"#4a6080",lineHeight:1.6}}>
+            <div style={{textAlign:"right",fontSize:10,color:"#4a6080",lineHeight:1.6}}>
               <div>每日PM4:00自動更新</div>
               <div style={{color:"#00b4d8",fontWeight:700}}>下次：{nextUpdate}</div>
             </div>
-            <button onClick={()=>setAccView(v=>!v)} style={{background:accView?"rgba(251,191,36,.2)":"rgba(255,255,255,.07)",border:`1px solid ${accView?"#fbbf24":"rgba(255,255,255,.1)"}`,borderRadius:8,padding:"5px 10px",color:accView?"#fbbf24":"#94a3b8",fontSize:10,cursor:"pointer",fontWeight:accView?700:400}}>
+            <button onClick={()=>setAccView(v=>!v)} style={{background:accView?"rgba(251,191,36,.2)":"rgba(255,255,255,.07)",border:`1px solid ${accView?"#fbbf24":"rgba(255,255,255,.1)"}`,borderRadius:8,padding:"5px 10px",color:accView?"#fbbf24":"#94a3b8",fontSize:13,cursor:"pointer",fontWeight:accView?700:400}}>
               📊 準確率
             </button>
-            <button onClick={doUpdate} disabled={updating} style={{background:updating?"rgba(20,184,166,.15)":"linear-gradient(135deg,#14b8a6,#0284c7)",border:updating?"1px solid #14b8a6":"none",borderRadius:9,padding:"7px 16px",color:"#fff",fontSize:11,cursor:updating?"wait":"pointer",display:"flex",alignItems:"center",gap:6,fontWeight:800,boxShadow:updating?"none":"0 3px 12px rgba(20,184,166,.4)"}}>
+            <button onClick={doUpdate} disabled={updating} style={{background:updating?"rgba(20,184,166,.15)":"linear-gradient(135deg,#14b8a6,#0284c7)",border:updating?"1px solid #14b8a6":"none",borderRadius:9,padding:"7px 16px",color:"#fff",fontSize:14,cursor:updating?"wait":"pointer",display:"flex",alignItems:"center",gap:6,fontWeight:800,boxShadow:updating?"none":"0 3px 12px rgba(20,184,166,.4)"}}>
               {updating?<><Spin size={12} color="#5eead4"/>更新中</>:"🔄 立即更新"}
             </button>
           </div>
@@ -790,17 +851,17 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
         {(updating||updateMsg)&&(
           <div style={{padding:"5px 14px",display:"flex",alignItems:"center",gap:8,background:updateMsg.startsWith("✅")?"#052e16":updateMsg.startsWith("❌")?"#450a0a":"#0a1e30",borderTop:"1px solid rgba(255,255,255,.06)"}}>
             {updating&&<div style={{flex:1,height:3,background:"#1a3a4a",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:"linear-gradient(90deg,#14b8a6,#0284c7,#14b8a6)",backgroundSize:"200% 100%",animation:"prog 1.5s linear infinite",borderRadius:3}}/></div>}
-            <span style={{fontSize:10,fontWeight:600,color:updateMsg.startsWith("✅")?"#34d399":updateMsg.startsWith("❌")?"#f87171":"#7dd3fc",whiteSpace:"nowrap"}}>{updateMsg}</span>
+            <span style={{fontSize:13,fontWeight:600,color:updateMsg.startsWith("✅")?"#34d399":updateMsg.startsWith("❌")?"#f87171":"#7dd3fc",whiteSpace:"nowrap"}}>{updateMsg}</span>
           </div>
         )}
       </header>
 
       <div style={{background:"#0f2027",overflow:"hidden",height:22,display:"flex",alignItems:"center",borderBottom:"1px solid #1e3a4a"}}>
-        <span style={{flexShrink:0,fontSize:8,color:"#5eead4",padding:"0 8px",borderRight:"1px solid #1e3a4a",fontWeight:700,whiteSpace:"nowrap"}}>{dataDate}</span>
+        <span style={{flexShrink:0,fontSize:10,color:"#5eead4",padding:"0 8px",borderRight:"1px solid #1e3a4a",fontWeight:700,whiteSpace:"nowrap"}}>{dataDate}</span>
         <div style={{overflow:"hidden",flex:1}}>
           <div style={{display:"inline-flex",animation:"scroll-left 80s linear infinite",whiteSpace:"nowrap"}}>
             {[...ticker,...ticker].map((s,i)=>(
-              <span key={i} style={{fontSize:9,color:s.change>=0?"#ff6666":"#4ade80",padding:"0 12px",borderRight:"1px solid #1e3a4a"}}>
+              <span key={i} style={{fontSize:12,color:s.change>=0?"#ff6666":"#4ade80",padding:"0 12px",borderRight:"1px solid #1e3a4a"}}>
                 {s.s} {s.n} {s.price} {s.change>=0?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%
               </span>
             ))}
@@ -813,29 +874,29 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
           <div style={{maxWidth:1000,margin:"0 auto"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
               <span style={{fontSize:15,fontWeight:800,color:"#fbbf24"}}>📊 AI 預測準確率{accuracy?.isMock?" (模擬測試)":""}</span>
-              <span style={{fontSize:9,color:"#4a6080"}}>每日更新後自動比對昨日預測 vs 今日實際漲跌</span>
-              <button onClick={()=>runMockTest()} disabled={accLoading} style={{marginLeft:"auto",background:"rgba(251,191,36,.15)",border:"1px solid #fbbf24",borderRadius:7,padding:"3px 10px",color:"#fbbf24",fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              <span style={{fontSize:12,color:"#4a6080"}}>每日更新後自動比對昨日預測 vs 今日實際漲跌</span>
+              <button onClick={()=>runMockTest()} disabled={accLoading} style={{marginLeft:"auto",background:"rgba(251,191,36,.15)",border:"1px solid #fbbf24",borderRadius:7,padding:"3px 10px",color:"#fbbf24",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
                 {accLoading?<><Spin size={10} color="#fbbf24"/>計算中</>:"🔄 重算"}
               </button>
               <button onClick={()=>setAccView(false)} style={{background:"none",border:"none",color:"#4a6080",cursor:"pointer",fontSize:18}}>✕</button>
             </div>
-            {accLoading&&<div style={{display:"flex",justifyContent:"center",padding:"20px",gap:8,alignItems:"center"}}><Spin size={20} color="#fbbf24"/><span style={{color:"#4a6080",fontSize:12}}>分析中…</span></div>}
+            {accLoading&&<div style={{display:"flex",justifyContent:"center",padding:"20px",gap:8,alignItems:"center"}}><Spin size={20} color="#fbbf24"/><span style={{color:"#4a6080",fontSize:16}}>分析中…</span></div>}
             {!accLoading&&!accuracy&&(
               <div style={{textAlign:"center",padding:"20px",color:"#4a6080"}}>
                 <div style={{fontSize:28,marginBottom:8}}>📭</div>
-                <div style={{fontSize:12,color:"#c8ddf0",marginBottom:6}}>尚無歷史比對資料</div>
-                <div style={{fontSize:11,lineHeight:1.8,marginBottom:12}}>
+                <div style={{fontSize:16,color:"#c8ddf0",marginBottom:6}}>尚無歷史比對資料</div>
+                <div style={{fontSize:14,lineHeight:1.8,marginBottom:12}}>
                   準確率系統需要<strong style={{color:"#fbbf24"}}>至少連續2天更新</strong>才能運作：<br/>
                   第1天：按「🔄 立即更新」→ 系統儲存今日預測<br/>
                   第2天：再按「🔄 立即更新」→ 自動比對昨日預測 vs 今日實際
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"center"}}>
-                  <div style={{fontSize:10,color:"#2a4060",background:"#0d1f30",borderRadius:8,padding:"8px 16px",textAlign:"left",maxWidth:340}}>
+                  <div style={{fontSize:13,color:"#2a4060",background:"#0d1f30",borderRadius:8,padding:"8px 16px",textAlign:"left",maxWidth:340}}>
                     💡 目前狀態：系統已在你每次更新時儲存預測紀錄<br/>
                     儲存位置：瀏覽器 localStorage（重整不會消失）<br/>
                     下次更新後即可看到準確率數字
                   </div>
-                  <button onClick={()=>runMockTest()} style={{background:"rgba(251,191,36,.15)",border:"1px solid #fbbf24",borderRadius:8,padding:"6px 16px",color:"#fbbf24",fontSize:11,cursor:"pointer",marginTop:4}}>
+                  <button onClick={()=>runMockTest()} style={{background:"rgba(251,191,36,.15)",border:"1px solid #fbbf24",borderRadius:8,padding:"6px 16px",color:"#fbbf24",fontSize:14,cursor:"pointer",marginTop:4}}>
                     🧪 用今日資料模擬測試（查看功能是否正常）
                   </button>
                 </div>
@@ -851,23 +912,23 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                     {l:"分析天數",v:accuracy.days.length,c:"#7dd3fc",sub:"交易日"},
                   ].map((card,i)=>(
                     <div key={i} style={{background:"#0d1f30",borderRadius:10,padding:"12px",border:`1px solid ${card.c}33`,textAlign:"center"}}>
-                      <div style={{fontSize:9,color:"#4a6080",marginBottom:5}}>{card.l}</div>
+                      <div style={{fontSize:12,color:"#4a6080",marginBottom:5}}>{card.l}</div>
                       <div style={{fontSize:22,fontWeight:900,color:card.c}}>{card.v}</div>
-                      <div style={{fontSize:9,color:"#4a6080",marginTop:2}}>{card.sub}</div>
+                      <div style={{fontSize:12,color:"#4a6080",marginTop:2}}>{card.sub}</div>
                     </div>
                   ))}
                 </div>
                 {accuracy.days.length>0&&(
                   <div style={{background:"#0d1f30",borderRadius:10,padding:"12px",marginBottom:10}}>
-                    <div style={{fontSize:11,fontWeight:700,color:"#c8ddf0",marginBottom:8}}>📅 每日準確率</div>
+                    <div style={{fontSize:14,fontWeight:700,color:"#c8ddf0",marginBottom:8}}>📅 每日準確率</div>
                     {accuracy.days.map((d,i)=>(
                       <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
-                        <span style={{fontSize:9,color:"#4a6080",width:55,flexShrink:0}}>{d.date}</span>
+                        <span style={{fontSize:12,color:"#4a6080",width:55,flexShrink:0}}>{d.date}</span>
                         <div style={{flex:1,height:14,background:"#1a2d40",borderRadius:6,overflow:"hidden"}}>
                           <div style={{height:"100%",width:`${d.rate}%`,background:d.rate>=60?"linear-gradient(90deg,#10b981,#34d399)":d.rate>=50?"linear-gradient(90deg,#f59e0b,#fbbf24)":"linear-gradient(90deg,#f87171,#fca5a5)",borderRadius:6}}/>
                         </div>
-                        <span style={{fontSize:10,fontWeight:700,color:d.rate>=60?"#10b981":d.rate>=50?"#f59e0b":"#f87171",width:34,textAlign:"right"}}>{d.rate}%</span>
-                        <span style={{fontSize:9,color:"#4a6080",width:44,textAlign:"right"}}>{d.ok}/{d.total}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:d.rate>=60?"#10b981":d.rate>=50?"#f59e0b":"#f87171",width:34,textAlign:"right"}}>{d.rate}%</span>
+                        <span style={{fontSize:12,color:"#4a6080",width:44,textAlign:"right"}}>{d.ok}/{d.total}</span>
                       </div>
                     ))}
                   </div>
@@ -875,26 +936,26 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                   {accuracy.best.length>0&&(
                     <div style={{background:"#0d1f30",borderRadius:10,padding:"12px",border:"1px solid #10b98133"}}>
-                      <div style={{fontSize:10,fontWeight:700,color:"#10b981",marginBottom:8}}>🏆 最準確</div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#10b981",marginBottom:8}}>🏆 最準確</div>
                       {accuracy.best.map((s,i)=>(
                         <div key={i} style={{display:"flex",alignItems:"center",padding:"4px 0",borderBottom:i<accuracy.best.length-1?"1px solid #1a2d40":"none"}}>
-                          <span style={{fontSize:9,color:"#4a6080",width:14}}>{i+1}</span>
-                          <span style={{fontSize:11,fontWeight:600,color:"#c8ddf0",flex:1}}>{s.name}</span>
-                          <span style={{fontSize:9,color:"#4a6080",marginRight:5}}>{s.sym}</span>
-                          <span style={{fontSize:12,fontWeight:800,color:"#10b981"}}>{s.rate}%</span>
+                          <span style={{fontSize:12,color:"#4a6080",width:14}}>{i+1}</span>
+                          <span style={{fontSize:14,fontWeight:600,color:"#c8ddf0",flex:1}}>{s.name}</span>
+                          <span style={{fontSize:12,color:"#4a6080",marginRight:5}}>{s.sym}</span>
+                          <span style={{fontSize:16,fontWeight:800,color:"#10b981"}}>{s.rate}%</span>
                         </div>
                       ))}
                     </div>
                   )}
                   {accuracy.worst.length>0&&(
                     <div style={{background:"#0d1f30",borderRadius:10,padding:"12px",border:"1px solid #f8717133"}}>
-                      <div style={{fontSize:10,fontWeight:700,color:"#f87171",marginBottom:8}}>⚠️ 最不準</div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#f87171",marginBottom:8}}>⚠️ 最不準</div>
                       {accuracy.worst.map((s,i)=>(
                         <div key={i} style={{display:"flex",alignItems:"center",padding:"4px 0",borderBottom:i<accuracy.worst.length-1?"1px solid #1a2d40":"none"}}>
-                          <span style={{fontSize:9,color:"#4a6080",width:14}}>{i+1}</span>
-                          <span style={{fontSize:11,fontWeight:600,color:"#c8ddf0",flex:1}}>{s.name}</span>
-                          <span style={{fontSize:9,color:"#4a6080",marginRight:5}}>{s.sym}</span>
-                          <span style={{fontSize:12,fontWeight:800,color:"#f87171"}}>{s.rate}%</span>
+                          <span style={{fontSize:12,color:"#4a6080",width:14}}>{i+1}</span>
+                          <span style={{fontSize:14,fontWeight:600,color:"#c8ddf0",flex:1}}>{s.name}</span>
+                          <span style={{fontSize:12,color:"#4a6080",marginRight:5}}>{s.sym}</span>
+                          <span style={{fontSize:16,fontWeight:800,color:"#f87171"}}>{s.rate}%</span>
                         </div>
                       ))}
                     </div>
@@ -911,18 +972,18 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
           <div style={{background:"linear-gradient(150deg,#0f2027,#164e63 55%,#155e75)",padding:"28px 16px 36px",textAlign:"center",position:"relative",overflow:"hidden"}}>
             <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(ellipse at 20% 80%,rgba(20,184,166,.1) 0%,transparent 50%)",pointerEvents:"none"}}/>
             <div style={{position:"relative",zIndex:1}}>
-              <div style={{display:"inline-block",fontSize:9,color:"#5eead4",letterSpacing:2,border:"1px solid rgba(94,234,212,.3)",borderRadius:20,padding:"3px 14px",marginBottom:10,fontWeight:600}}>
+              <div style={{display:"inline-block",fontSize:12,color:"#5eead4",letterSpacing:2,border:"1px solid rgba(94,234,212,.3)",borderRadius:20,padding:"3px 14px",marginBottom:10,fontWeight:600}}>
                 台積電+SpaceX衛星供應鏈 {STOCK_DB.length}支 · 每日PM4自動更新
               </div>
               <h1 style={{fontSize:"clamp(17px,3.8vw,26px)",fontWeight:900,color:"#f0fdfa",margin:"0 0 5px"}}>台股 AI 操作指令中心</h1>
-              <p style={{fontSize:11,color:"#7dd3fc",margin:"0 0 20px"}}>含昇達科/華通/燿華/同欣電/璟德/德律等 · 長線/短線/勿買 · {dataDate}</p>
+              <p style={{fontSize:14,color:"#7dd3fc",margin:"0 0 20px"}}>含昇達科/華通/燿華/同欣電/璟德/德律等 · 長線/短線/勿買 · {dataDate}</p>
               <div style={{maxWidth:540,margin:"0 auto",position:"relative"}}>
                 <div style={{display:"flex",background:"#fff",borderRadius:14,boxShadow:"0 8px 30px rgba(0,0,0,.3)",border:"2px solid rgba(20,184,166,.4)"}}>
                   <span style={{padding:"0 12px",display:"flex",alignItems:"center",color:"#64748b",fontSize:17,flexShrink:0}}>🔍</span>
                   <input value={searchQ} onChange={e=>{setSearchQ(e.target.value);setShowDrop(!!e.target.value);}}
                     onFocus={()=>dropList.length>0&&setShowDrop(true)} onBlur={()=>setTimeout(()=>setShowDrop(false),180)}
                     placeholder="代號/公司名/產業 (3491、昇達科、衛星、散熱、德律)"
-                    style={{flex:1,border:"none",padding:"13px 0",fontSize:13,color:"#1e293b",background:"transparent",minWidth:0}}/>
+                    style={{flex:1,border:"none",padding:"13px 0",fontSize:16,color:"#1e293b",background:"transparent",minWidth:0}}/>
                   {searchQ&&<button onClick={()=>{setSearchQ("");setShowDrop(false);}} style={{padding:"0 12px",background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:17,flexShrink:0}}>✕</button>}
                 </div>
                 {showDrop&&dropList.length>0&&(
@@ -931,18 +992,18 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                       <div key={s.s} onMouseDown={()=>{openStock(s);setSearchQ("");setShowDrop(false);}}
                         style={{display:"flex",alignItems:"center",padding:"10px 14px",cursor:"pointer",borderBottom:i<dropList.length-1?"1px solid #f1f5f9":"none",background:"#fff"}}
                         onMouseEnter={e=>e.currentTarget.style.background="#f0fdfa"} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
-                        <div style={{width:34,height:34,borderRadius:7,background:"linear-gradient(135deg,#0f2027,#155e75)",display:"flex",alignItems:"center",justifyContent:"center",color:"#5eead4",fontSize:10,fontWeight:800,marginRight:10,flexShrink:0}}>{s.s.slice(0,2)}</div>
+                        <div style={{width:34,height:34,borderRadius:7,background:"linear-gradient(135deg,#0f2027,#155e75)",display:"flex",alignItems:"center",justifyContent:"center",color:"#5eead4",fontSize:13,fontWeight:800,marginRight:10,flexShrink:0}}>{s.s.slice(0,2)}</div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                            <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{s.n}</span>
-                            <span style={{fontSize:10,color:"#64748b",fontWeight:600}}>{s.s}</span>
-                            <span style={{fontSize:9,padding:"1px 6px",borderRadius:7,background:s.adv.bg,color:s.adv.c,border:`1px solid ${s.adv.bd}`,fontWeight:700}}>{s.adv.icon}{s.adv.trade}</span>
+                            <span style={{fontSize:16,fontWeight:700,color:"#0f172a"}}>{s.n}</span>
+                            <span style={{fontSize:13,color:"#64748b",fontWeight:600}}>{s.s}</span>
+                            <span style={{fontSize:12,padding:"1px 6px",borderRadius:7,background:s.adv.bg,color:s.adv.c,border:`1px solid ${s.adv.bd}`,fontWeight:700}}>{s.adv.icon}{s.adv.trade}</span>
                           </div>
-                          <div style={{fontSize:9,color:"#94a3b8"}}>{s.cat}·{s.role}</div>
+                          <div style={{fontSize:12,color:"#94a3b8"}}>{s.cat}·{s.role}</div>
                         </div>
                         <div style={{textAlign:"right",flexShrink:0}}>
                           <div style={{fontSize:14,fontWeight:800,color:pos?"#e00000":"#16a34a"}}>{s.price||"-"}</div>
-                          <div style={{fontSize:10,color:pos?"#e00000":"#16a34a"}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</div>
+                          <div style={{fontSize:13,color:pos?"#e00000":"#16a34a"}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</div>
                         </div>
                       </div>
                     );})}
@@ -955,8 +1016,8 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
           <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",boxShadow:"0 1px 6px rgba(0,0,0,.06)"}}>
             <div style={{display:"flex",alignItems:"stretch",overflowX:"auto"}}>
               <div ref={catRef} style={{position:"relative",flexShrink:0}}>
-                <button onClick={()=>setCatOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:5,background:catOpen?"#f0fdfa":"transparent",border:"none",borderBottom:catOpen?"2px solid #14b8a6":"2px solid transparent",padding:"10px 12px",color:catOpen?"#14b8a6":"#475569",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",height:"100%"}}>
-                  ☰ 選產業 <span style={{fontSize:9,display:"inline-block",transform:catOpen?"rotate(180deg)":"none",transition:"transform .2s"}}>▼</span>
+                <button onClick={()=>setCatOpen(v=>!v)} style={{display:"flex",alignItems:"center",gap:5,background:catOpen?"#f0fdfa":"transparent",border:"none",borderBottom:catOpen?"2px solid #14b8a6":"2px solid transparent",padding:"10px 12px",color:catOpen?"#14b8a6":"#475569",fontSize:14,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",height:"100%"}}>
+                  ☰ 選產業 <span style={{fontSize:12,display:"inline-block",transform:catOpen?"rotate(180deg)":"none",transition:"transform .2s"}}>▼</span>
                 </button>
                 {catOpen&&(
                   <div style={{position:"absolute",top:"calc(100% + 1px)",left:0,background:"#fff",borderRadius:12,boxShadow:"0 12px 40px rgba(0,0,0,.18)",zIndex:500,border:"1px solid #e2e8f0",minWidth:240,maxHeight:"75vh",overflowY:"auto"}}>
@@ -964,14 +1025,14 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                       <div key={c} onMouseDown={()=>{setSelCat(c);if(c==="全部"){setCatOpen(false);setSubCat(null);}else setSubCat(subCat===c?null:c);}}
                         style={{display:"flex",alignItems:"center",padding:"10px 14px",cursor:"pointer",background:isSel?"#f0fdfa":"#fff",borderLeft:isSel?"3px solid #14b8a6":"3px solid transparent",borderBottom:"1px solid #f1f5f9"}}
                         onMouseEnter={e=>e.currentTarget.style.background="#f8fafc"} onMouseLeave={e=>e.currentTarget.style.background=isSel?"#f0fdfa":"#fff"}>
-                        <span style={{flex:1,fontSize:13,fontWeight:isSel?700:400,color:isSel?"#0f172a":"#334155"}}>{c==="全部"?"🏠 全部產業":c}</span>
-                        {st&&<><span style={{fontSize:9,color:"#94a3b8",marginRight:6}}>{st.count}支</span><span style={{fontSize:10,fontWeight:600,color:st.avg>=0?"#059669":"#dc2626",marginRight:4}}>{st.avg>=0?"+":""}{st.avg}%</span></>}
-                        {c!=="全部"&&<span style={{fontSize:9,color:"#94a3b8"}}>{subCat===c?"▲":"▼"}</span>}
+                        <span style={{flex:1,fontSize:16,fontWeight:isSel?700:400,color:isSel?"#0f172a":"#334155"}}>{c==="全部"?"🏠 全部產業":c}</span>
+                        {st&&<><span style={{fontSize:12,color:"#94a3b8",marginRight:6}}>{st.count}支</span><span style={{fontSize:13,fontWeight:600,color:st.avg>=0?"#059669":"#dc2626",marginRight:4}}>{st.avg>=0?"+":""}{st.avg}%</span></>}
+                        {c!=="全部"&&<span style={{fontSize:12,color:"#94a3b8"}}>{subCat===c?"▲":"▼"}</span>}
                       </div>
                     );})}
                     {subCat&&subCat!=="全部"&&(
                       <div style={{background:"#f8fafc",borderTop:"2px solid #14b8a6"}}>
-                        <div style={{padding:"5px 14px",fontSize:9,color:"#14b8a6",fontWeight:700}}>▼ {subCat}（點擊直接分析）</div>
+                        <div style={{padding:"5px 14px",fontSize:12,color:"#14b8a6",fontWeight:700}}>▼ {subCat}（點擊直接分析）</div>
                         {STOCK_DB.filter(s=>s.cat===subCat).map(s=>{
                           const q=prices[s.s]||{};const pos=(q.ch??0)>=0;const adv=getAdv(q.ch??0);
                           const enr={...s,price:q.p||0,change:q.ch||0,volume:q.vol||0,hist:[],adv,sc:scoreFn(q.ch||0,q.vol||0)};
@@ -980,13 +1041,13 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                               style={{display:"flex",alignItems:"center",padding:"8px 14px 8px 20px",cursor:"pointer",borderBottom:"1px solid #f1f5f9",background:"#f8fafc"}}
                               onMouseEnter={e=>e.currentTarget.style.background="#f0fdfa"} onMouseLeave={e=>e.currentTarget.style.background="#f8fafc"}>
                               <div style={{flex:1}}>
-                                <div style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>{s.n} <span style={{fontSize:9,color:"#94a3b8",fontWeight:400}}>{s.s}</span></div>
-                                <div style={{fontSize:9,color:"#94a3b8"}}>{s.role}</div>
+                                <div style={{fontSize:16,fontWeight:700,color:"#0f172a"}}>{s.n} <span style={{fontSize:12,color:"#94a3b8",fontWeight:400}}>{s.s}</span></div>
+                                <div style={{fontSize:12,color:"#94a3b8"}}>{s.role}</div>
                               </div>
                               <div style={{textAlign:"right",marginRight:8}}>
-                                {q.p?<><div style={{fontSize:13,fontWeight:800,color:pos?"#e00000":"#16a34a"}}>{q.p}</div><div style={{fontSize:9,color:pos?"#e00000":"#16a34a"}}>{pos?"▲":"▼"}{Math.abs(q.ch||0).toFixed(2)}%</div></>:<div style={{fontSize:9,color:"#cbd5e1"}}>—</div>}
+                                {q.p?<><div style={{fontSize:16,fontWeight:800,color:pos?"#e00000":"#16a34a"}}>{q.p}</div><div style={{fontSize:12,color:pos?"#e00000":"#16a34a"}}>{pos?"▲":"▼"}{Math.abs(q.ch||0).toFixed(2)}%</div></>:<div style={{fontSize:12,color:"#cbd5e1"}}>—</div>}
                               </div>
-                              <span style={{fontSize:9,padding:"2px 7px",borderRadius:7,background:adv.bg,color:adv.c,border:`1px solid ${adv.bd}`,fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>{adv.icon}{adv.trade}</span>
+                              <span style={{fontSize:12,padding:"2px 7px",borderRadius:7,background:adv.bg,color:adv.c,border:`1px solid ${adv.bd}`,fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>{adv.icon}{adv.trade}</span>
                             </div>
                           );
                         })}
@@ -998,9 +1059,9 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
               <div style={{display:"flex",overflowX:"auto",flex:1}}>
                 {CATS.map(c=>{const isSel=selCat===c;const st=catStats[c];return(
                   <button key={c} onClick={()=>setSelCat(c)} className="cb"
-                    style={{padding:"10px 10px",border:"none",borderBottom:isSel?"2px solid #14b8a6":"2px solid transparent",background:"transparent",color:isSel?"#14b8a6":"#64748b",fontSize:10,fontWeight:isSel?700:400,whiteSpace:"nowrap",display:"flex",flexDirection:"column",alignItems:"center",gap:1,flexShrink:0}}>
+                    style={{padding:"10px 10px",border:"none",borderBottom:isSel?"2px solid #14b8a6":"2px solid transparent",background:"transparent",color:isSel?"#14b8a6":"#64748b",fontSize:13,fontWeight:isSel?700:400,whiteSpace:"nowrap",display:"flex",flexDirection:"column",alignItems:"center",gap:1,flexShrink:0}}>
                     {c==="全部"?"全部":c}
-                    {st&&<span style={{fontSize:7,color:st.avg>=0?"#10b981":"#f87171"}}>{st.avg>=0?"+":""}{st.avg}%</span>}
+                    {st&&<span style={{fontSize:9,color:st.avg>=0?"#10b981":"#f87171"}}>{st.avg>=0?"+":""}{st.avg}%</span>}
                   </button>
                 );})}
               </div>
@@ -1013,7 +1074,7 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <div style={{width:4,height:22,background:"linear-gradient(180deg,#14b8a6,#0284c7)",borderRadius:4}}/>
                   <div style={{fontSize:15,fontWeight:800,color:"#0f172a"}}>今日 AI 精選 Top 8</div>
-                  <span style={{fontSize:9,color:"#94a3b8"}}>評分最高·{dataDate}</span>
+                  <span style={{fontSize:12,color:"#94a3b8"}}>評分最高·{dataDate}</span>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:9,marginBottom:20}}>
                   {top8.map((s,idx)=>{const pos=s.change>=0;const rc=s.sc>=80?"#10b981":s.sc>=65?"#f59e0b":"#6366f1";return(
@@ -1025,19 +1086,19 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                       <div style={{padding:"10px 12px 0"}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                           <div style={{display:"flex",gap:4}}>
-                            <span style={{fontSize:9,padding:"2px 6px",borderRadius:8,background:rc+"20",color:rc,fontWeight:700}}>#{idx+1}</span>
-                            <span style={{fontSize:9,padding:"2px 6px",borderRadius:8,background:s.adv.bg,color:s.adv.c,border:`1px solid ${s.adv.bd}`,fontWeight:700}}>{s.adv.icon}{s.adv.trade}</span>
+                            <span style={{fontSize:12,padding:"2px 6px",borderRadius:8,background:rc+"20",color:rc,fontWeight:700}}>#{idx+1}</span>
+                            <span style={{fontSize:12,padding:"2px 6px",borderRadius:8,background:s.adv.bg,color:s.adv.c,border:`1px solid ${s.adv.bd}`,fontWeight:700}}>{s.adv.icon}{s.adv.trade}</span>
                           </div>
-                          <span style={{fontSize:8,color:"#94a3b8"}}>{s.cat}</span>
+                          <span style={{fontSize:10,color:"#94a3b8"}}>{s.cat}</span>
                         </div>
                         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
                           <div>
-                            <div style={{fontSize:13,fontWeight:900,color:"#0f172a"}}>{s.n}</div>
-                            <div style={{fontSize:9,color:"#64748b",fontWeight:600}}>{s.s}</div>
-                            <div style={{fontSize:8,color:"#94a3b8",marginBottom:4,maxWidth:110,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.role}</div>
+                            <div style={{fontSize:16,fontWeight:900,color:"#0f172a"}}>{s.n}</div>
+                            <div style={{fontSize:12,color:"#64748b",fontWeight:600}}>{s.s}</div>
+                            <div style={{fontSize:10,color:"#94a3b8",marginBottom:4,maxWidth:110,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.role}</div>
                             <div style={{display:"flex",alignItems:"baseline",gap:5}}>
                               <span style={{fontSize:18,fontWeight:900,color:pos?"#e00000":"#16a34a"}}>{s.price||"—"}</span>
-                              <span style={{fontSize:10,color:pos?"#e00000":"#16a34a",fontWeight:700}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</span>
+                              <span style={{fontSize:13,color:pos?"#e00000":"#16a34a",fontWeight:700}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</span>
                             </div>
                           </div>
                           <Ring score={s.sc} size={54}/>
@@ -1045,7 +1106,7 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                       </div>
                       <div style={{margin:"6px 0 0"}}><Spark prices={s.hist} color={s.sc>=65?"#14b8a6":"#f87171"} h={32}/></div>
                       <div style={{padding:"5px 12px 8px"}}>
-                        <div style={{background:s.adv.bg,borderRadius:6,padding:"3px 7px",fontSize:9,color:s.adv.c,fontWeight:700,textAlign:"center",border:`1px solid ${s.adv.bd}`}}>{s.adv.tag}</div>
+                        <div style={{background:s.adv.bg,borderRadius:6,padding:"3px 7px",fontSize:12,color:s.adv.c,fontWeight:700,textAlign:"center",border:`1px solid ${s.adv.bd}`}}>{s.adv.tag}</div>
                       </div>
                     </div>
                   );})}
@@ -1055,10 +1116,10 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
               <div style={{width:4,height:20,background:"linear-gradient(180deg,#14b8a6,#0284c7)",borderRadius:4}}/>
               <span style={{fontSize:14,fontWeight:800,color:"#0f172a"}}>{selCat==="全部"?`完整供應鏈 (${STOCK_DB.length}支)`:selCat}</span>
-              <span style={{fontSize:9,color:"#94a3b8"}}>顯示 {filtered.length} 支</span>
+              <span style={{fontSize:12,color:"#94a3b8"}}>顯示 {filtered.length} 支</span>
               <div style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap"}}>
                 {[["sc","評分"],["ch","漲跌"],["p","股價"],["vol","成交"]].map(([f,l])=>(
-                  <button key={f} onClick={()=>sp(f)} style={{background:sortBy===f?"#0f2027":"#f1f5f9",border:`1px solid ${sortBy===f?"#14b8a6":"#e2e8f0"}`,borderRadius:6,padding:"3px 8px",color:sortBy===f?"#5eead4":"#64748b",fontSize:9,cursor:"pointer",fontWeight:sortBy===f?700:400}}>
+                  <button key={f} onClick={()=>sp(f)} style={{background:sortBy===f?"#0f2027":"#f1f5f9",border:`1px solid ${sortBy===f?"#14b8a6":"#e2e8f0"}`,borderRadius:6,padding:"3px 8px",color:sortBy===f?"#5eead4":"#64748b",fontSize:12,cursor:"pointer",fontWeight:sortBy===f?700:400}}>
                     {l}{sortBy===f?(sortDir>0?"↑":"↓"):""}
                   </button>
                 ))}
@@ -1067,7 +1128,7 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
             <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",border:"1px solid #e2e8f0"}}>
               <div style={{display:"grid",gridTemplateColumns:"24px 128px 50px 58px 52px 58px 116px 82px 48px",alignItems:"center",padding:"7px 10px",background:"linear-gradient(90deg,#0f2027,#1a3a4a)"}}>
                 {["#","公司名稱","代號","股價","漲跌","成交張","操作指令","建議","評分"].map((h,i)=>(
-                  <div key={i} style={{fontSize:8,color:"#7dd3fc",fontWeight:600,textAlign:i>=3?"right":"left",paddingRight:i>=3&&i<8?4:0}}>{h}</div>
+                  <div key={i} style={{fontSize:10,color:"#7dd3fc",fontWeight:600,textAlign:i>=3?"right":"left",paddingRight:i>=3&&i<8?4:0}}>{h}</div>
                 ))}
               </div>
               {filtered.map((s,i)=>{
@@ -1075,37 +1136,37 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                 return(
                   <div key={`${s.s}_${i}`} className="rh" onClick={()=>openStock(s)}
                     style={{display:"grid",gridTemplateColumns:"24px 128px 50px 58px 52px 58px 116px 82px 48px",alignItems:"center",padding:"8px 10px",borderBottom:i<filtered.length-1?"1px solid #f1f5f9":"none",background:"#fff",animation:`fadeUp .28s ${Math.min(i,25)*.018}s both`}}>
-                    <span style={{fontSize:9,color:"#e2e8f0"}}>{i+1}</span>
+                    <span style={{fontSize:12,color:"#e2e8f0"}}>{i+1}</span>
                     <div style={{minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:700,color:"#0f172a",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.n}</div>
-                      <div style={{fontSize:8,color:"#94a3b8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.cat}</div>
+                      <div style={{fontSize:16,fontWeight:700,color:"#0f172a",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.n}</div>
+                      <div style={{fontSize:10,color:"#94a3b8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.cat}</div>
                     </div>
-                    <div style={{fontSize:10,color:"#475569",fontWeight:700}}>{s.s}</div>
-                    <div style={{textAlign:"right",fontSize:13,fontWeight:800,color:pos?"#e00000":"#16a34a",paddingRight:4}}>{s.price||"-"}</div>
-                    <div style={{textAlign:"right",fontSize:10,fontWeight:700,color:pos?"#e00000":"#16a34a",paddingRight:3}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</div>
-                    <div style={{textAlign:"right",fontSize:9,color:"#64748b",paddingRight:3}}>{Number(s.volume||0).toLocaleString()}</div>
+                    <div style={{fontSize:13,color:"#475569",fontWeight:700}}>{s.s}</div>
+                    <div style={{textAlign:"right",fontSize:16,fontWeight:800,color:pos?"#e00000":"#16a34a",paddingRight:4}}>{s.price||"-"}</div>
+                    <div style={{textAlign:"right",fontSize:13,fontWeight:700,color:pos?"#e00000":"#16a34a",paddingRight:3}}>{pos?"▲":"▼"}{Math.abs(s.change).toFixed(2)}%</div>
+                    <div style={{textAlign:"right",fontSize:12,color:"#64748b",paddingRight:3}}>{Number(s.volume||0).toLocaleString()}</div>
                     <div style={{textAlign:"center",paddingRight:2}}>
-                      <span style={{fontSize:9,padding:"2px 5px",borderRadius:6,background:s.adv.bg,color:s.adv.c,border:`1px solid ${s.adv.bd}`,fontWeight:700,whiteSpace:"nowrap"}}>{s.adv.icon} {s.adv.tag}</span>
+                      <span style={{fontSize:12,padding:"2px 5px",borderRadius:6,background:s.adv.bg,color:s.adv.c,border:`1px solid ${s.adv.bd}`,fontWeight:700,whiteSpace:"nowrap"}}>{s.adv.icon} {s.adv.tag}</span>
                     </div>
                     <div style={{textAlign:"center",paddingRight:2}}>
-                      <span style={{fontSize:9,padding:"2px 6px",borderRadius:7,fontWeight:800,...hs}}>{hLabel(s.adv.h)}</span>
+                      <span style={{fontSize:12,padding:"2px 6px",borderRadius:7,fontWeight:800,...hs}}>{hLabel(s.adv.h)}</span>
                     </div>
                     <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:12,fontWeight:800,color:rc}}>{s.sc}%</div>
+                      <div style={{fontSize:16,fontWeight:800,color:rc}}>{s.sc}%</div>
                     </div>
                   </div>
                 );
               })}
             </div>
             <div style={{marginTop:10,background:"#fff",borderRadius:10,padding:"10px 14px",border:"1px solid #e2e8f0"}}>
-              <div style={{fontSize:10,fontWeight:700,color:"#0f172a",marginBottom:6}}>📋 操作建議說明</div>
+              <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:6}}>📋 操作建議說明</div>
               <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                 {[{bg:"#f0fdf4",c:"#16a34a",bd:"#86efac",t:"🟢 長線"},{bg:"#fff7ed",c:"#ea580c",bd:"#fdba74",t:"🟠 短線"},{bg:"#ecfeff",c:"#0891b2",bd:"#67e8f9",t:"🔵 低點布局"},{bg:"#f5f3ff",c:"#7c3aed",bd:"#c4b5fd",t:"🟣 等拉回"},{bg:"#f8fafc",c:"#64748b",bd:"#cbd5e1",t:"⚪ 觀望"},{bg:"#fffbeb",c:"#b45309",bd:"#fde68a",t:"🟡 趨勢弱"},{bg:"#fef2f2",c:"#dc2626",bd:"#fca5a5",t:"🔴 賣出/別碰"}].map((x,i)=>(
-                  <span key={i} style={{fontSize:9,padding:"3px 8px",borderRadius:7,background:x.bg,color:x.c,border:`1px solid ${x.bd}`,fontWeight:600}}>{x.t}</span>
+                  <span key={i} style={{fontSize:12,padding:"3px 8px",borderRadius:7,background:x.bg,color:x.c,border:`1px solid ${x.bd}`,fontWeight:600}}>{x.t}</span>
                 ))}
               </div>
             </div>
-            <div style={{marginTop:6,fontSize:9,color:"#94a3b8",textAlign:"center"}}>⚠️ AI生成，僅供參考，不構成投資建議。股價為 <span style={{color:"#fbbf24",fontWeight:600}}>{dataDate} 收盤價</span>，每日PM4:00自動更新，或按「🔄 立即更新」手動更新。</div>
+            <div style={{marginTop:6,fontSize:12,color:"#94a3b8",textAlign:"center"}}>⚠️ AI生成，僅供參考，不構成投資建議。股價為 <span style={{color:"#fbbf24",fontWeight:600}}>{dataDate} 收盤價</span>，每日PM4:00自動更新，或按「🔄 立即更新」手動更新。</div>
           </div>
         </>
       )}
@@ -1113,10 +1174,10 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
       {view==="detail"&&selStock&&(
         <div style={{flex:1}}>
           <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",padding:"9px 14px",display:"flex",alignItems:"center",gap:10,position:"sticky",top:50,zIndex:100}}>
-            <button onClick={()=>setView("home")} style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8,padding:"5px 13px",color:"#475569",fontSize:11,cursor:"pointer",fontWeight:700}}>← 返回</button>
+            <button onClick={()=>setView("home")} style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8,padding:"5px 13px",color:"#475569",fontSize:14,cursor:"pointer",fontWeight:700}}>← 返回</button>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>{selStock.n}（{selStock.s}）· {selStock.cat}</div>
-              <div style={{fontSize:9,color:"#94a3b8"}}>{selStock.role}</div>
+              <div style={{fontSize:16,fontWeight:700,color:"#0f172a"}}>{selStock.n}（{selStock.s}）· {selStock.cat}</div>
+              <div style={{fontSize:12,color:"#94a3b8"}}>{selStock.role}</div>
             </div>
           </div>
           <div style={{maxWidth:820,margin:"0 auto",padding:"14px 14px 48px",display:"flex",flexDirection:"column",gap:12}}>
@@ -1124,34 +1185,34 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4,flexWrap:"wrap"}}>
-                    <span style={{fontSize:9,padding:"2px 8px",borderRadius:8,background:"rgba(20,184,166,.2)",color:"#5eead4",border:"1px solid rgba(20,184,166,.3)"}}>{selStock.cat}</span>
-                    <span style={{fontSize:9,color:"#7dd3fc"}}>{selStock.role}</span>
+                    <span style={{fontSize:12,padding:"2px 8px",borderRadius:8,background:"rgba(20,184,166,.2)",color:"#5eead4",border:"1px solid rgba(20,184,166,.3)"}}>{selStock.cat}</span>
+                    <span style={{fontSize:12,color:"#7dd3fc"}}>{selStock.role}</span>
                   </div>
-                  <div style={{fontSize:20,fontWeight:900,color:"#f0fdfa"}}>{selStock.n} <span style={{fontSize:13,color:"#7dd3fc",fontWeight:400}}>({selStock.s})</span></div>
+                  <div style={{fontSize:20,fontWeight:900,color:"#f0fdfa"}}>{selStock.n} <span style={{fontSize:16,color:"#7dd3fc",fontWeight:400}}>({selStock.s})</span></div>
                   <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:8}}>
                     <span style={{fontSize:30,fontWeight:900,color:selPos?"#ff4444":"#4ade80"}}>{selStock.price||"—"}</span>
-                    <span style={{fontSize:12,color:"#7dd3fc"}}>TWD</span>
+                    <span style={{fontSize:16,color:"#7dd3fc"}}>TWD</span>
                     <span style={{fontSize:14,fontWeight:700,padding:"2px 10px",borderRadius:7,background:selPos?"rgba(220,0,0,.15)":"rgba(74,222,128,.15)",color:selPos?"#ff4444":"#4ade80"}}>
                       {selPos?"▲":"▼"}{Math.abs(selStock.change??0).toFixed(2)}%
                     </span>
                   </div>
-                  <div style={{fontSize:9,color:"#5eead4",marginTop:3}}>成交 {Number(selStock.volume||0).toLocaleString()} 張 · <span style={{color:"#fbbf24",fontWeight:600}}>收盤日期：{dataDate}</span></div>
+                  <div style={{fontSize:12,color:"#5eead4",marginTop:3}}>成交 {Number(selStock.volume||0).toLocaleString()} 張 · <span style={{color:"#fbbf24",fontWeight:600}}>收盤日期：{dataDate}</span></div>
                 </div>
                 <div style={{textAlign:"center",background:selStock.adv.bg,borderRadius:12,padding:"12px 16px",border:`2px solid ${selStock.adv.bd}`,minWidth:120}}>
                   <div style={{fontSize:20}}>{selStock.adv.icon}</div>
-                  <div style={{fontSize:11,fontWeight:900,color:selStock.adv.c,marginTop:3}}>{selStock.adv.tag}</div>
-                  <div style={{marginTop:6,fontSize:11,fontWeight:800,padding:"3px 10px",borderRadius:8,background:selStock.adv.c,color:"#fff",display:"inline-block"}}>{hLabel(selStock.adv.h)}</div>
-                  <div style={{marginTop:5,fontSize:10,color:selStock.adv.c,fontWeight:600}}>明日評分 {selStock.sc}%</div>
+                  <div style={{fontSize:14,fontWeight:900,color:selStock.adv.c,marginTop:3}}>{selStock.adv.tag}</div>
+                  <div style={{marginTop:6,fontSize:14,fontWeight:800,padding:"3px 10px",borderRadius:8,background:selStock.adv.c,color:"#fff",display:"inline-block"}}>{hLabel(selStock.adv.h)}</div>
+                  <div style={{marginTop:5,fontSize:13,color:selStock.adv.c,fontWeight:600}}>明日評分 {selStock.sc}%</div>
                 </div>
               </div>
             </div>
             {/* K線圖 */}
             <div style={{background:"#fff",borderRadius:16,padding:"16px 18px",boxShadow:"0 4px 18px rgba(0,0,0,.08)",border:"1px solid #e8f0fe"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#2563eb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>🕯️</div>
+                <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#2563eb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🕯️</div>
                 <div>
-                  <div style={{fontSize:13,fontWeight:800,color:"#0f172a"}}>K線走勢圖</div>
-                  <div style={{fontSize:9,color:"#94a3b8"}}>近20日 K線 · MA5(黃) · MA10(藍) · MA20(粉)</div>
+                  <div style={{fontSize:16,fontWeight:800,color:"#0f172a"}}>K線走勢圖</div>
+                  <div style={{fontSize:12,color:"#94a3b8"}}>近20日 K線 · MA5(黃) · MA10(藍) · MA20(粉)</div>
                 </div>
               </div>
               <CandleChart sym={selStock.s} currentPrice={selStock.price} currentCh={selStock.change}/>
@@ -1163,14 +1224,14 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
             {/* AI操作指令 */}
             <div style={{background:"#fff",borderRadius:16,padding:"16px 18px",boxShadow:"0 4px 18px rgba(0,0,0,.08)",border:"1px solid #e8f0fe"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#14b8a6,#0284c7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>🤖</div>
+                <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#14b8a6,#0284c7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🤖</div>
                 <div>
-                  <div style={{fontSize:13,fontWeight:800,color:"#0f172a"}}>AI 操作指令</div>
-                  <div style={{fontSize:9,color:"#94a3b8"}}>仿「週二操作指令」風格 · Claude AI</div>
+                  <div style={{fontSize:16,fontWeight:800,color:"#0f172a"}}>AI 操作指令</div>
+                  <div style={{fontSize:12,color:"#94a3b8"}}>仿「週二操作指令」風格 · Claude AI</div>
                 </div>
               </div>
-              {aiLoading?<div style={{display:"flex",gap:5,alignItems:"center",padding:"6px 0"}}>{[0,1,2].map(i=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:"#14b8a6",animation:`pulse 1.2s ${i*.2}s infinite`}}/>)}<span style={{fontSize:11,color:"#94a3b8",marginLeft:4}}>AI 分析中…</span></div>
-              :<div style={{fontSize:13,color:"#1e293b",lineHeight:1.9,whiteSpace:"pre-wrap"}}>{detailAI}</div>}
+              {aiLoading?<div style={{display:"flex",gap:5,alignItems:"center",padding:"6px 0"}}>{[0,1,2].map(i=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:"#14b8a6",animation:`pulse 1.2s ${i*.2}s infinite`}}/>)}<span style={{fontSize:14,color:"#94a3b8",marginLeft:4}}>AI 分析中…</span></div>
+              :<div style={{fontSize:16,color:"#1e293b",lineHeight:1.9,whiteSpace:"pre-wrap"}}>{detailAI}</div>}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
               {[{l:"公司名稱",v:selStock.n,c:"#0f172a"},{l:"股票代號",v:selStock.s,c:"#0891b2"},{l:"所屬類別",v:selStock.cat,c:"#7c3aed"},
@@ -1180,17 +1241,17 @@ p=收盤價(TWD整數),ch=今日漲跌幅%(保留2位小數,正負都要),vol=�
                 {l:"明日機率",v:`${selStock.sc}%`,c:selStock.sc>=75?"#10b981":selStock.sc>=60?"#f59e0b":"#94a3b8"},
               ].map((x,i)=>(
                 <div key={i} style={{background:"#fff",borderRadius:10,padding:"10px 12px",boxShadow:"0 2px 8px rgba(0,0,0,.06)",border:"1px solid #f1f5f9"}}>
-                  <div style={{fontSize:8,color:"#94a3b8",marginBottom:3}}>{x.l}</div>
-                  <div style={{fontSize:11,fontWeight:700,color:x.c,lineHeight:1.3}}>{x.v||"-"}</div>
+                  <div style={{fontSize:10,color:"#94a3b8",marginBottom:3}}>{x.l}</div>
+                  <div style={{fontSize:14,fontWeight:700,color:x.c,lineHeight:1.3}}>{x.v||"-"}</div>
                 </div>
               ))}
             </div>
-            <div style={{textAlign:"center",fontSize:9,color:"#94a3b8"}}>⚠️ AI生成，僅供參考，不構成投資建議。</div>
+            <div style={{textAlign:"center",fontSize:12,color:"#94a3b8"}}>⚠️ AI生成，僅供參考，不構成投資建議。</div>
           </div>
         </div>
       )}
 
-      <footer style={{background:"#0f2027",color:"#334155",textAlign:"center",padding:"10px",fontSize:9}}>
+      <footer style={{background:"#0f2027",color:"#334155",textAlign:"center",padding:"10px",fontSize:12}}>
         台積電+低軌衛星AI供應鏈 · {STOCK_DB.length}支 · {dataDate} · PM4自動更新 · 不構成投資建議
       </footer>
     </div>
