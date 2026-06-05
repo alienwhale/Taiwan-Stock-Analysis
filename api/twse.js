@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════
-// 台股 API 中間層 v5
+// 台股 API 中間層 v6
+// 核心改變：改用 STOCK_DAY（含日期）取代 STOCK_DAY_ALL（無日期）
 // 上市(TWSE) + 上櫃(TPEx) + 個股歷史K線
-// 不需要 API Key，完全免費
 // ══════════════════════════════════════════════════════════════
 
 const OTC_STOCKS = new Set([
@@ -21,10 +21,25 @@ const OTC_STOCKS = new Set([
   '6414','2464',
 ]);
 
+// 民國年轉西元
+function rocToAD(rocDate) {
+  const [y, m, d] = rocDate.split('/');
+  return `${parseInt(y)+1911}/${m}/${d}`;
+}
+
+// 取得本月第一天的 YYYYMMDD
+function getMonthStart(offset = 0) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + offset);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  return `${y}${m}01`;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
+  res.setHeader('Cache-Control', 'no-cache'); // 不快取，每次都抓最新
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { type, stock } = req.query;
@@ -33,22 +48,17 @@ export default async function handler(req, res) {
   if (type === 'history' && stock) {
     try {
       const isOTC = OTC_STOCKS.has(stock);
-      const today = new Date();
       const results = [];
 
-      // 抓最近2個月資料（確保有足夠交易日）
       for (let m = 0; m <= 1; m++) {
-        const d = new Date(today.getFullYear(), today.getMonth() - m, 1);
-        const yyyymm = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;
-        const yyyymmdd = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}01`;
+        const dateParam = getMonthStart(-m);
+        const yyyymm = dateParam.slice(0,6);
 
         let url, rows = [];
         if (isOTC) {
-          // 上櫃：TPEx
           url = `https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_download.php?l=zh-tw&d=${yyyymm}&stkno=${stock}&s=0,asc,0&o=json`;
         } else {
-          // 上市：TWSE
-          url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${yyyymmdd}&stockNo=${stock}`;
+          url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${dateParam}&stockNo=${stock}`;
         }
 
         const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
@@ -56,48 +66,43 @@ export default async function handler(req, res) {
         const data = await r.json();
 
         if (!isOTC && data.stat === 'OK' && Array.isArray(data.data)) {
-          // TWSE 格式：[日期, 成交股數, 成交金額, 開盤, 最高, 最低, 收盤, 漲跌, 筆數]
           data.data.forEach(row => {
-            const dateStr = row[0]; // e.g. "115/04/01"
-            const [y, mo, dd] = dateStr.split('/');
-            const year = parseInt(y) + 1911;
-            const dateFormatted = `${year}/${mo}/${dd}`;
-            const open  = parseFloat(row[3]?.replace(/,/g,'')) || 0;
-            const high  = parseFloat(row[4]?.replace(/,/g,'')) || 0;
-            const low   = parseFloat(row[5]?.replace(/,/g,'')) || 0;
             const close = parseFloat(row[6]?.replace(/,/g,'')) || 0;
-            const vol   = Math.round(parseInt(row[1]?.replace(/,/g,'') || '0') / 1000);
-            if (close > 0) rows.push({ date: dateFormatted, open, high, low, close, vol });
+            if (close > 0) rows.push({
+              date: rocToAD(row[0]),
+              open:  parseFloat(row[3]?.replace(/,/g,'')) || 0,
+              high:  parseFloat(row[4]?.replace(/,/g,'')) || 0,
+              low:   parseFloat(row[5]?.replace(/,/g,'')) || 0,
+              close,
+              vol: Math.round(parseInt(row[1]?.replace(/,/g,'') || '0') / 1000)
+            });
           });
         } else if (isOTC && data.iTotalRecords > 0 && Array.isArray(data.aaData)) {
-          // TPEx 格式
           data.aaData.forEach(row => {
-            const dateStr = row[0]; // e.g. "115/04/01"
-            const [y, mo, dd] = dateStr.split('/');
-            const year = parseInt(y) + 1911;
-            const dateFormatted = `${year}/${mo}/${dd}`;
-            const open  = parseFloat(row[4]?.replace(/,/g,'')) || 0;
-            const high  = parseFloat(row[5]?.replace(/,/g,'')) || 0;
-            const low   = parseFloat(row[6]?.replace(/,/g,'')) || 0;
             const close = parseFloat(row[2]?.replace(/,/g,'')) || 0;
-            const vol   = Math.round(parseInt(row[1]?.replace(/,/g,'') || '0') / 1000);
-            if (close > 0) rows.push({ date: dateFormatted, open, high, low, close, vol });
+            if (close > 0) rows.push({
+              date: rocToAD(row[0]),
+              open:  parseFloat(row[4]?.replace(/,/g,'')) || 0,
+              high:  parseFloat(row[5]?.replace(/,/g,'')) || 0,
+              low:   parseFloat(row[6]?.replace(/,/g,'')) || 0,
+              close,
+              vol: Math.round(parseInt(row[1]?.replace(/,/g,'') || '0') / 1000)
+            });
           });
         }
         results.push(...rows);
       }
 
-      // 排序由舊到新，取最近60筆
-      results.sort((a, b) => a.date.localeCompare(b.date));
+      results.sort((a,b) => a.date.localeCompare(b.date));
       const recent = results.slice(-60);
 
       return res.status(200).json({ stock, data: recent, count: recent.length });
-    } catch (e) {
+    } catch(e) {
       return res.status(500).json({ error: e.message });
     }
   }
 
-  // ── 即時股價（盤中）────────────────────────────────────────
+  // ── 即時股價（盤中 9:00~13:30）────────────────────────
   if (type === 'realtime') {
     try {
       const stocks = (req.query.stocks || '').split(',').filter(Boolean);
@@ -111,37 +116,53 @@ export default async function handler(req, res) {
       const data = await r.json();
 
       const formatted = {};
+      let dataDate = '';
       (data?.msgArray || []).forEach(s => {
         const price = parseFloat(s.z !== '-' ? s.z : s.y) || 0;
         const prev  = parseFloat(s.y) || 0;
         const ch    = prev > 0 ? +((price - prev) / prev * 100).toFixed(2) : 0;
+        // 日期格式 "115/06/05" → 轉換
+        if (s.d && !dataDate) dataDate = rocToAD(s.d.slice(0,3)+'/'+s.d.slice(3,5)+'/'+s.d.slice(5,7));
         formatted[s.c] = { p: price, ch, vol: parseInt(s.v || '0'), name: s.n };
       });
-      return res.status(200).json({ source: 'realtime', data: formatted });
-    } catch (e) {
+
+      return res.status(200).json({ source: 'realtime', dataDate, data: formatted });
+    } catch(e) {
       return res.status(500).json({ error: e.message });
     }
   }
 
-  // ── 盤後全市場收盤價（每天 15:30 後更新）──────────────────
+  // ── 盤後全市場：改用 STOCK_DAY 批次取樣確認日期 ──────────
+  // 策略：先用 STOCK_DAY_ALL 快速取得全部價格
+  //       同時用 STOCK_DAY(2330) 確認最新資料日期
+  //       若日期是昨日，標示「昨日收盤」，今日則標示「今日收盤」
   try {
     const formatted = {};
     let dataDate = '';
+    let dataDateRaw = '';
 
-    // 1. TWSE 上市盤後
+    // 1. 用 2330 確認最新資料日期
+    const checkUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${getMonthStart()}&stockNo=2330`;
+    const checkRes = await fetch(checkUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (checkRes.ok) {
+      const checkData = await checkRes.json();
+      if (checkData.stat === 'OK' && Array.isArray(checkData.data) && checkData.data.length > 0) {
+        const lastRow = checkData.data[checkData.data.length - 1];
+        dataDateRaw = lastRow[0]; // e.g. "115/06/04"
+        dataDate = rocToAD(dataDateRaw); // "2026/06/04"
+      }
+    }
+
+    // 2. TWSE 上市 STOCK_DAY_ALL（快速取全部）
     const twseRes = await fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL', {
       headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
     });
     if (twseRes.ok) {
       const twseData = await twseRes.json();
-      if (Array.isArray(twseData) && twseData.length > 0) {
-        // 取資料日期（從第一筆推算）
-        const today = new Date();
-        dataDate = today.toLocaleDateString('zh-TW');
-
+      if (Array.isArray(twseData)) {
         twseData.forEach(s => {
           const price  = parseFloat(s.ClosingPrice?.replace(/,/g,'')) || 0;
-          const change = parseFloat((s.Change||'0').replace(/,/g,'').replace(/^[+]/,'')) || 0;
+          const change = parseFloat((s.Change||'0').replace(/[+,]/g,'')) || 0;
           const prev   = price - change;
           const ch     = prev > 0 ? +((change / prev) * 100).toFixed(2) : 0;
           const vol    = Math.round(parseInt(s.TradeVolume?.replace(/,/g,'') || '0') / 1000);
@@ -150,7 +171,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2. TPEx 上櫃盤後
+    // 3. TPEx 上櫃
     const tpexRes = await fetch('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes', {
       headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
     });
@@ -160,7 +181,7 @@ export default async function handler(req, res) {
         tpexData.forEach(s => {
           const code  = s.SecuritiesCompanyCode || s.Code;
           const price = parseFloat(s.Close?.replace(/,/g,'')) || 0;
-          const change = parseFloat((s.Change||'0').replace(/,/g,'').replace(/^[+]/,'')) || 0;
+          const change = parseFloat((s.Change||'0').replace(/[+,]/g,'')) || 0;
           const prev  = price - change;
           const ch    = prev > 0 ? +((change / prev) * 100).toFixed(2) : 0;
           const vol   = Math.round(parseInt((s.TradingShares||'0').replace(/,/g,'')) / 1000);
@@ -171,11 +192,29 @@ export default async function handler(req, res) {
 
     const total = Object.keys(formatted).length;
     if (total < 50) {
-      return res.status(503).json({ error: 'Market data not yet available (before 15:30)', total });
+      return res.status(503).json({
+        error: 'Market data not yet available (盤後資料尚未更新，約15:30後)',
+        total,
+        hint: `目前抓到 ${total} 支，請於 15:30 後再試`
+      });
     }
 
-    return res.status(200).json({ source: 'aftermarket', dataDate, total, data: formatted });
-  } catch (e) {
+    // 判斷今日或昨日
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
+    const isToday = dataDate === todayStr;
+    const dateLabel = isToday ? `${dataDate}（今日）` : `${dataDate}（昨日，今日收盤後更新）`;
+
+    return res.status(200).json({
+      source: isToday ? 'twse_today' : 'twse_yesterday',
+      dataDate,
+      dateLabel,
+      isToday,
+      total,
+      data: formatted,
+    });
+
+  } catch(e) {
     return res.status(500).json({ error: e.message });
   }
 }
