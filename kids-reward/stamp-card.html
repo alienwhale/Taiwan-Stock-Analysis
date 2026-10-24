@@ -184,6 +184,36 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
 .confirm { background: var(--ink-soft); border: 1px solid var(--ink); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 
+/* Tappable empty slots */
+button.slot { font: inherit; background: transparent; padding: 0; cursor: pointer; color: inherit; }
+button.slot:active { background: var(--ink-soft); transform: scale(.94); }
+button.slot .n { opacity: 1; font-size: .95rem; }
+
+/* Saved cards strip */
+.bank { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--card); border: 2px solid var(--sun); border-radius: 16px; padding: 10px 12px; }
+.bank .cards { display: flex; flex: none; }
+.bank .mini { width: 22px; height: 28px; border-radius: 5px; background: var(--sun); border: 2px solid var(--card); margin-left: -8px; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); }
+.bank .mini:first-child { margin-left: 0; }
+.bank .txt { flex: 1 1 140px; min-width: 0; }
+.bank .txt b { font-family: var(--font-display); font-weight: 400; font-size: 1.1rem; }
+.bank .txt div { color: var(--muted); font-size: .85rem; }
+.bank .btn { flex: none; }
+
+/* Full-card choice */
+.choice-card { background: var(--card); border-radius: 22px; padding: 22px 18px; width: min(100%, 380px); box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; text-align: center; }
+.choice-card h2 { font-family: var(--font-display); font-weight: 400; font-size: 1.7rem; margin: 0; }
+.choice-card p { margin: 0; color: var(--muted); }
+.big-choice { font: inherit; border-radius: 16px; padding: 14px 16px; cursor: pointer; border: 2px solid transparent; display: flex; flex-direction: column; gap: 2px; text-align: center; }
+.big-choice b { font-family: var(--font-display); font-weight: 400; font-size: 1.3rem; }
+.big-choice span { font-size: .88rem; opacity: .85; }
+.big-choice.spin { background: var(--sun); color: #3a2a00; }
+.big-choice.keep { background: var(--card); color: var(--fg); border-color: var(--sky); }
+.link-btn { font: inherit; background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; text-decoration: underline; }
+
+.tier { display: flex; flex-direction: column; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+.tier label { font-family: var(--font-display); font-size: 1.1rem; }
+.tier textarea { min-height: 150px; background: var(--paper); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
@@ -205,10 +235,16 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
     <div class="count"><span id="countNum">0</span> <small>/ 30</small></div>
   </div>
 
+  <div class="bank" id="bank" hidden>
+    <div class="cards" id="bankCards"></div>
+    <div class="txt"><b id="bankTitle"></b><div id="bankSub"></div></div>
+    <button class="btn" id="bankSpin">現在轉</button>
+  </div>
+
   <div class="card"><div class="grid" id="grid"></div></div>
 
   <button class="stamp-btn" id="stampBtn"></button>
-  <p class="hint" id="hint">表現好的時候，按一下蓋印章</p>
+  <p class="hint" id="hint">點空格裡的數字，就能在那一格蓋印章</p>
   <div class="sync" id="sync"></div>
 </div>
 
@@ -217,6 +253,16 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
     <div id="cheerStamp"></div>
     <div class="msg" id="cheerMsg"></div>
     <div class="msg2" id="cheerMsg2"></div>
+  </div>
+</div>
+
+<div class="overlay" id="choice" hidden>
+  <div class="choice-card" role="dialog" aria-labelledby="choiceTitle">
+    <h2 id="choiceTitle">集滿 30 個了！</h2>
+    <p id="choiceText">要現在轉輪盤，還是存起來換更大的獎？</p>
+    <button class="big-choice spin" id="choiceSpin"><b>現在轉輪盤</b><span id="choiceSpinSub"></span></button>
+    <button class="big-choice keep" id="choiceKeep"><b>存起來，下次換更大的獎</b><span id="choiceKeepSub"></span></button>
+    <button class="link-btn" id="choiceLater">等一下再決定</button>
   </div>
 </div>
 
@@ -229,10 +275,11 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
       <div class="hub">轉!</div>
     </div>
     <button class="stamp-btn spin-ready" id="spinBtn">轉輪盤</button>
+    <button class="link-btn" id="wheelBack">先不要轉，回去</button>
     <div class="result" id="result" hidden>
       <div class="label" id="resultLabel">恭喜你得到</div>
       <div class="prize" id="resultPrize"></div>
-      <button class="btn primary" id="newCard">收下獎品，開始新的集點卡</button>
+      <button class="btn primary" id="newCard">收下獎品</button>
     </div>
   </div>
 </div>
@@ -250,15 +297,13 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
     </div>
 
     <div class="field">
-      <h3><label for="prizeList">輪盤獎品（一行一個）</label></h3>
-      <textarea id="prizeList"></textarea>
-      <div class="note" id="prizeNote">目前是範例獎品，換成你們家的獎品就好。至少 2 個，最多 12 個。</div>
-      <div class="note">輪盤依照順序編號：第一行是 1 號，抽中機率 3%；其他號碼平分剩下的 97%。</div>
-      <button class="btn" id="previewWheel">預覽轉盤效果（不會記錄）</button>
+      <h3>輪盤獎品（一行一個）</h3>
+      <div class="note">集滿的卡可以存起來。存越多張再轉，用的是越大的獎品組。每組的第一行是 1 號，抽中機率 3%，其他號碼平分剩下的 97%。</div>
+      <div id="tiers"></div>
     </div>
 
     <div class="field">
-      <h3>印章</h3>
+      <h3>印章和存起來的卡</h3>
       <div class="row">
         <button class="btn" id="undoBtn">收回最後一個印章</button>
         <button class="btn danger" id="resetBtn">清空這張集點卡</button>
@@ -270,6 +315,10 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
           <button class="btn danger" id="resetYes">確定清空</button>
         </div>
       </div>
+      <div class="row">
+        <button class="btn" id="unbankBtn">收回一張存起來的卡</button>
+      </div>
+      <div class="note" id="bankNote"></div>
     </div>
 
     <div class="field">
@@ -285,16 +334,28 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
 (() => {
   const GOAL = 30;
   const KEY = 'haobangbang-card-v1';
-  const EXAMPLE_PRIZES = ['冰淇淋一支', '多玩 30 分鐘', '挑一本新書', '小玩具一個', '決定晚餐吃什麼', '去公園野餐'];
+  const TIERS = 3;
+  const TIER_NAMES = ['1 張卡（30 個印章）', '2 張卡（60 個印章）', '3 張卡以上（90 個印章）'];
+  const EXAMPLE_TIERS = [
+    ['冰淇淋一支', '多玩 30 分鐘', '挑一本新書', '小玩具一個', '決定晚餐吃什麼', '去公園野餐'],
+    ['樂高一盒', '去遊樂園', '看一場電影', '多玩 1 小時', '買想要的繪本', '吃一次速食大餐'],
+    ['想要的大玩具', '去動物園', '全家出遊一天', '露營一晚', '自己挑一個大禮物', '吃大餐慶祝']
+  ];
   const CHEERS = ['好棒棒！', '太厲害了！', '你做到了！', '超讚的！', '真了不起！', '繼續加油！', '好乖喔！', '給你拍拍手！'];
   const SEG_COLORS = ['--ink', '--sun', '--sky', '--leaf', '--plum'];
 
-  let state = { name: '', stamps: [], prizes: EXAMPLE_PRIZES.slice(), customPrizes: false, history: [] };
+  const emptyCard = () => Array(GOAL).fill(null);
+  let state = { name: '', stamps: emptyCard(), banked: 0, tiers: EXAMPLE_TIERS.map(t => t.slice()), customTiers: [false, false, false], history: [] };
   let docRef = null;
   let saving = Promise.resolve();
 
   const $ = id => document.getElementById(id);
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const filled = () => state.stamps.filter(Boolean).length;
+  const isFull = () => filled() >= GOAL;
+  const tierFor = cards => Math.max(1, Math.min(cards, TIERS)) - 1;
+  const prizesFor = cards => { const t = state.tiers[tierFor(cards)]; return t && t.length >= 2 ? t : EXAMPLE_TIERS[tierFor(cards)]; };
+  const kidPrefix = () => state.name.trim() ? state.name.trim() + '，' : '';
 
   /* ---------- storage: artifact db when available, phone storage otherwise ---------- */
   function readLocal() {
@@ -304,11 +365,17 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
   }
   function normalize(s) {
+    const stamps = emptyCard();
+    if (Array.isArray(s.stamps)) s.stamps.slice(0, GOAL).forEach((v, i) => { stamps[i] = typeof v === 'string' ? v : null; });
+    // older versions kept a single prize list
+    const tiers = Array.isArray(s.tiers) ? s.tiers.slice(0, TIERS) : [Array.isArray(s.prizes) ? s.prizes : null];
+    const custom = Array.isArray(s.customTiers) ? s.customTiers : [!!s.customPrizes];
     return {
       name: typeof s.name === 'string' ? s.name : '',
-      stamps: Array.isArray(s.stamps) ? s.stamps.slice(0, GOAL) : [],
-      prizes: Array.isArray(s.prizes) && s.prizes.length >= 2 ? s.prizes : EXAMPLE_PRIZES.slice(),
-      customPrizes: !!s.customPrizes,
+      stamps,
+      banked: Number.isInteger(s.banked) && s.banked > 0 ? s.banked : 0,
+      tiers: EXAMPLE_TIERS.map((ex, i) => Array.isArray(tiers[i]) && tiers[i].length >= 2 ? tiers[i] : ex.slice()),
+      customTiers: EXAMPLE_TIERS.map((_, i) => !!custom[i]),
       history: Array.isArray(s.history) ? s.history : []
     };
   }
@@ -339,8 +406,7 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
         state = normalize(snap.data());
         writeLocal();
         render();
-        if (state.stamps.length >= GOAL && !spinning && $('wheelSheet').hidden) openWheel();
-      } else if (first && (state.stamps.length || state.history.length || state.name || state.customPrizes)) {
+      } else if (first && (filled() || state.banked || state.history.length || state.name || state.customTiers.some(Boolean))) {
         save();
       }
       first = false;
@@ -367,33 +433,50 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
   function rotFor(i) { return ((i * 47) % 31) - 15; }
   let justIndex = -1;
   function render() {
-    const n = state.stamps.length;
-    const name = state.name.trim();
-    $('title').textContent = name ? `${name}的好棒棒集點卡` : '好棒棒集點卡';
+    const n = filled();
+    $('title').textContent = state.name.trim() ? `${state.name.trim()}的好棒棒集點卡` : '好棒棒集點卡';
     $('countNum').textContent = n;
     $('barFill').style.width = (n / GOAL * 100) + '%';
     const left = GOAL - n;
-    $('subtitle').textContent = left > 0 ? `再 ${left} 個印章就能轉獎品輪盤` : '集滿了！快去轉輪盤';
+    $('subtitle').textContent = left > 0 ? `再 ${left} 個印章就集滿一張卡` : '集滿了！可以轉輪盤或存起來';
 
     const grid = $('grid');
     grid.innerHTML = '';
     for (let i = 0; i < GOAL; i++) {
-      const s = document.createElement('div');
-      s.className = 'slot' + (i === GOAL - 1 ? ' prize-slot' : '') + (i < n ? ' filled' : '') + (i === justIndex ? ' just' : '');
-      s.innerHTML = `<span class="n">${i === GOAL - 1 ? '🎁' : i + 1}</span>` + (i < n ? stampSVG('stamp', rotFor(i)) : '');
+      const has = !!state.stamps[i];
+      const s = document.createElement(has ? 'div' : 'button');
+      s.className = 'slot' + (i === GOAL - 1 ? ' prize-slot' : '') + (has ? ' filled' : '') + (i === justIndex ? ' just' : '');
+      s.innerHTML = `<span class="n">${i === GOAL - 1 ? '🎁' : i + 1}</span>` + (has ? stampSVG('stamp', rotFor(i)) : '');
+      if (!has) {
+        s.setAttribute('aria-label', `在第 ${i + 1} 格蓋印章`);
+        s.addEventListener('click', () => addStamp(i));
+      }
       grid.appendChild(s);
     }
     justIndex = -1;
 
+    const b = state.banked;
+    $('bank').hidden = b === 0;
+    if (b) {
+      $('bankCards').innerHTML = '<i class="mini"></i>'.repeat(Math.min(b, 5));
+      $('bankTitle').textContent = `已經存了 ${b} 張卡`;
+      const next = b + 1;
+      $('bankSub').textContent = b >= TIERS
+        ? '已經可以轉最大獎的輪盤'
+        : `再集滿 1 張，就能轉 ${next} 張卡的大獎`;
+      $('bankSpin').hidden = isFull();
+      $('bankSpin').textContent = `用 ${b} 張卡轉`;
+    }
+
     const btn = $('stampBtn');
     if (n >= GOAL) {
       btn.className = 'stamp-btn spin-ready';
-      btn.innerHTML = '去轉獎品輪盤！';
+      btn.innerHTML = '集滿了！轉輪盤或存起來';
       $('hint').textContent = '30 個印章都集滿了';
     } else {
       btn.className = 'stamp-btn';
       btn.innerHTML = btnStamp + '<span>蓋一個好棒棒</span>';
-      $('hint').textContent = '表現好的時候，按一下蓋印章';
+      $('hint').textContent = '點空格裡的數字，就能在那一格蓋印章';
     }
   }
 
@@ -451,47 +534,71 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
 
   /* ---------- stamping ---------- */
   let cheering = false;
-  function addStamp() {
-    if (cheering) return;
-    if (state.stamps.length >= GOAL) { openWheel(); return; }
-    state.stamps.push(new Date().toISOString());
-    const n = state.stamps.length;
-    justIndex = n - 1;
-    save();
+  function showCheer(msg, msg2, burst, then) {
     cheering = true;
-
-    const name = state.name.trim();
-    let msg = CHEERS[Math.floor(Math.random() * CHEERS.length)];
-    let msg2 = `第 ${n} 個印章，還差 ${GOAL - n} 個`;
-    if (n === GOAL) { msg = '集滿 30 個了！'; msg2 = '可以轉獎品輪盤囉'; }
-    else if (n === 15) { msg2 = `已經一半了！還差 ${GOAL - n} 個`; }
-    else if (GOAL - n <= 3) { msg2 = `只差 ${GOAL - n} 個就能轉輪盤！`; }
-    if (name && n !== GOAL) msg = name + '，' + msg;
-
     $('cheerStamp').innerHTML = stampSVG('big', -8);
     $('cheerMsg').textContent = msg;
     $('cheerMsg2').textContent = msg2;
     $('cheer').hidden = false;
     setTimeout(thump, 330);
-    setTimeout(() => { chime(); confetti(n === GOAL ? 220 : 110); }, 380);
-    setTimeout(() => {
-      $('cheer').hidden = true; cheering = false;
-      render();
-      if (n === GOAL) setTimeout(openWheel, 900);
-    }, 2100);
+    setTimeout(() => { chime(); confetti(burst); }, 380);
+    setTimeout(() => { $('cheer').hidden = true; cheering = false; render(); if (then) then(); }, 2100);
   }
-  $('stampBtn').addEventListener('click', addStamp);
+  function addStamp(slot) {
+    if (cheering) return;
+    if (isFull()) { openChoice(); return; }
+    const i = Number.isInteger(slot) && !state.stamps[slot] ? slot : state.stamps.findIndex(v => !v);
+    if (i < 0) return;
+    state.stamps[i] = new Date().toISOString();
+    const n = filled();
+    justIndex = i;
+    save();
+
+    let msg = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+    let msg2 = `第 ${n} 個印章，還差 ${GOAL - n} 個`;
+    if (n === GOAL) { msg = '集滿 30 個了！'; msg2 = '可以轉輪盤，也可以存起來'; }
+    else if (n === 15) { msg2 = `已經一半了！還差 ${GOAL - n} 個`; }
+    else if (GOAL - n <= 3) { msg2 = `只差 ${GOAL - n} 個就集滿了！`; }
+    if (state.name.trim() && n !== GOAL) msg = kidPrefix() + msg;
+    showCheer(msg, msg2, n === GOAL ? 220 : 110, n === GOAL ? () => setTimeout(openChoice, 600) : null);
+  }
+  $('stampBtn').addEventListener('click', () => addStamp());
   $('cheer').addEventListener('click', () => {}); // swallow taps while the animation plays
+
+  /* ---------- full card: spin now or save it ---------- */
+  function openChoice() {
+    if (!isFull()) return;
+    const cards = state.banked + 1;
+    $('choiceTitle').textContent = kidPrefix() + '集滿 30 個了！';
+    $('choiceText').textContent = state.banked
+      ? `加上之前存的 ${state.banked} 張，現在一共有 ${cards} 張卡。`
+      : '要現在轉輪盤，還是存起來換更大的獎？';
+    $('choiceSpinSub').textContent = `用 ${cards} 張卡，轉「${TIER_NAMES[tierFor(cards)]}」的獎品`;
+    $('choiceKeepSub').textContent = cards >= TIERS
+      ? `存起來共 ${cards} 張（已經是最大獎了）`
+      : `存起來共 ${cards} 張，下次轉「${TIER_NAMES[tierFor(cards + 1)]}」的獎品`;
+    $('choice').hidden = false;
+  }
+  $('choiceLater').addEventListener('click', () => { $('choice').hidden = true; });
+  $('choiceSpin').addEventListener('click', () => { $('choice').hidden = true; openWheel(); });
+  $('choiceKeep').addEventListener('click', () => {
+    $('choice').hidden = true;
+    state.banked += 1;
+    state.stamps = emptyCard();
+    save();
+    showCheer('存起來了！', `已經存了 ${state.banked} 張卡，繼續加油`, 140, null);
+  });
+  $('bankSpin').addEventListener('click', () => { if (!isFull() && state.banked) openWheel(); });
 
   /* ---------- wheel ---------- */
   const wc = $('wheel'), wx = wc.getContext('2d');
   let rot = 0, spinning = false;
-  function prizes() { return state.prizes.length >= 2 ? state.prizes : EXAMPLE_PRIZES; }
+  let demo = false, wheelCards = 1, wheelUsesCard = false;
   function drawWheel() {
     const size = wc.clientWidth || 320, dpr = devicePixelRatio || 1;
     if (wc.width !== Math.round(size * dpr)) { wc.width = Math.round(size * dpr); wc.height = Math.round(size * dpr); }
     wx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const list = prizes(), n = list.length, seg = Math.PI * 2 / n, R = size / 2, c = R;
+    const list = prizesFor(wheelCards), n = list.length, seg = Math.PI * 2 / n, R = size / 2, c = R;
     wx.clearRect(0, 0, size, size);
     wx.beginPath(); wx.arc(c, c, R - 2, 0, Math.PI * 2); wx.fillStyle = css('--card'); wx.fill();
     for (let i = 0; i < n; i++) {
@@ -531,23 +638,31 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
       wx.fillStyle = i % 2 ? '#fff' : css('--sun'); wx.fill();
     }
   }
-  let demo = false;
+  // preview: number of cards to preview; otherwise spends every saved card (plus this one if it is full)
   function openWheel(preview) {
-    demo = preview === true;
-    if (!demo && state.stamps.length < GOAL) return;
+    demo = Number.isInteger(preview);
+    if (demo) { wheelCards = preview; wheelUsesCard = false; }
+    else {
+      wheelUsesCard = isFull();
+      wheelCards = state.banked + (wheelUsesCard ? 1 : 0);
+      if (wheelCards < 1) return;
+    }
     $('wheelSheet').hidden = false;
     $('result').hidden = true;
     $('spinBtn').hidden = false; $('spinBtn').disabled = false;
-    $('newCard').textContent = demo ? '關閉預覽' : '收下獎品，開始新的集點卡';
-    $('wheelTitle').textContent = demo ? '預覽轉盤（不會記錄）'
-      : (state.name.trim() ? state.name.trim() + '，' : '') + '集滿 30 個了！轉轉看！';
+    $('wheelBack').hidden = false;
+    $('newCard').textContent = demo ? '關閉預覽' : '收下獎品';
+    $('wheelTitle').textContent = demo
+      ? `預覽「${TIER_NAMES[tierFor(wheelCards)]}」的輪盤（不會記錄）`
+      : `${kidPrefix()}用 ${wheelCards} 張卡轉輪盤！`;
     requestAnimationFrame(drawWheel);
   }
   function spin() {
-    if (spinning || (!demo && state.stamps.length < GOAL)) return;
+    if (spinning) return;
     spinning = true; audio();
     $('spinBtn').disabled = true;
-    const list = prizes().slice(), n = list.length, seg = Math.PI * 2 / n;
+    $('wheelBack').hidden = true;
+    const list = prizesFor(wheelCards).slice(), n = list.length, seg = Math.PI * 2 / n;
     // No. 1 wins 3% of the time; the other numbers share the remaining 97% equally
     const r = Math.random();
     const k = r < .03 ? 0 : Math.min(n - 1, 1 + Math.floor((r - .03) / .97 * (n - 1)));
@@ -572,8 +687,9 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
   function finish(prize) {
     // record right away, so closing the app now never loses the prize
     if (!demo) {
-      state.history.unshift({ date: new Date().toISOString(), prize });
-      state.stamps = [];
+      state.history.unshift({ date: new Date().toISOString(), prize, cards: wheelCards });
+      state.banked = 0;
+      if (wheelUsesCard) state.stamps = emptyCard();
       save();
     }
     $('resultLabel').textContent = demo ? '預覽結果：會得到' : '恭喜你得到';
@@ -587,6 +703,7 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
     render();
   }
   $('spinBtn').addEventListener('click', spin);
+  $('wheelBack').addEventListener('click', () => { if (!spinning) $('wheelSheet').hidden = true; });
   $('newCard').addEventListener('click', () => { $('wheelSheet').hidden = true; render(); });
   addEventListener('resize', () => { if (!$('wheelSheet').hidden) drawWheel(); });
 
@@ -595,20 +712,50 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
     const d = new Date(iso);
     return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
   }
+  const parseList = text => text.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 12);
+  const tierTimers = [];
+  function commitTier(t, list) {
+    clearTimeout(tierTimers[t]);
+    if (list.length < 2 || list.join('\n') === state.tiers[t].join('\n')) return;
+    state.tiers[t] = list; state.customTiers[t] = true; save();
+  }
+  const tierBox = $('tiers');
+  TIER_NAMES.forEach((name, t) => {
+    const box = document.createElement('div');
+    box.className = 'tier';
+    box.innerHTML = `<label for="tier${t}">${name}</label><textarea id="tier${t}"></textarea><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
+    tierBox.appendChild(box);
+    $('tier' + t).addEventListener('input', e => {
+      const list = parseList(e.target.value);
+      clearTimeout(tierTimers[t]);
+      if (list.length < 2) { $('tierNote' + t).textContent = '至少要有 2 個獎品，輪盤才能轉。'; return; }
+      $('tierNote' + t).textContent = `共 ${list.length} 個獎品，已儲存。`;
+      tierTimers[t] = setTimeout(() => commitTier(t, list), 600);
+    });
+    $('tierPreview' + t).addEventListener('click', () => {
+      commitTier(t, parseList($('tier' + t).value));
+      $('settingsSheet').hidden = true;
+      openWheel(t + 1);
+    });
+  });
   function renderSettings() {
     $('kidName').value = state.name;
-    $('prizeList').value = state.prizes.join('\n');
-    $('prizeNote').textContent = state.customPrizes
-      ? '一行一個獎品，至少 2 個，最多 12 個。'
-      : '目前是範例獎品，換成你們家的獎品就好。一行一個，至少 2 個，最多 12 個。';
-    $('undoBtn').disabled = state.stamps.length === 0;
-    $('resetBtn').disabled = state.stamps.length === 0;
+    for (let t = 0; t < TIERS; t++) {
+      $('tier' + t).value = state.tiers[t].join('\n');
+      $('tierNote' + t).textContent = state.customTiers[t]
+        ? '一行一個獎品，至少 2 個，最多 12 個。'
+        : '目前是範例獎品，換成你們家的獎品就好。一行一個，至少 2 個，最多 12 個。';
+    }
+    $('undoBtn').disabled = filled() === 0;
+    $('resetBtn').disabled = filled() === 0;
+    $('unbankBtn').disabled = state.banked === 0;
+    $('bankNote').textContent = `目前存了 ${state.banked} 張集滿的卡。`;
     $('resetConfirm').hidden = true;
     const h = $('history'); h.innerHTML = '';
-    if (!state.history.length) { h.innerHTML = '<li class="empty">還沒有得獎紀錄，集滿 30 個印章就會出現在這裡。</li>'; return; }
+    if (!state.history.length) { h.innerHTML = '<li class="empty">還沒有得獎紀錄，轉過輪盤就會出現在這裡。</li>'; return; }
     for (const r of state.history) {
       const li = document.createElement('li');
-      const a = document.createElement('span'); a.textContent = r.prize;
+      const a = document.createElement('span'); a.textContent = r.prize + (r.cards > 1 ? `（${r.cards} 張卡）` : '');
       const b = document.createElement('span'); b.className = 'd'; b.textContent = fmtDate(r.date);
       li.append(a, b); h.appendChild(li);
     }
@@ -620,31 +767,21 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
     state.name = e.target.value.slice(0, 12);
     clearTimeout(nameTimer); nameTimer = setTimeout(save, 600);
   });
-  let prizeTimer;
-  $('prizeList').addEventListener('input', e => {
-    const list = e.target.value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 12);
-    clearTimeout(prizeTimer);
-    if (list.length < 2) { $('prizeNote').textContent = '至少要有 2 個獎品，輪盤才能轉。'; return; }
-    $('prizeNote').textContent = `共 ${list.length} 個獎品，已儲存。`;
-    prizeTimer = setTimeout(() => { state.prizes = list; state.customPrizes = true; save(); }, 600);
-  });
-  $('previewWheel').addEventListener('click', () => {
-    const list = $('prizeList').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 12);
-    clearTimeout(prizeTimer);
-    if (list.length >= 2 && list.join('\n') !== state.prizes.join('\n')) { state.prizes = list; state.customPrizes = true; save(); }
-    $('settingsSheet').hidden = true;
-    openWheel(true);
-  });
   $('undoBtn').addEventListener('click', () => {
-    if (!state.stamps.length) return;
-    state.stamps.pop(); save(); renderSettings(); render();
+    let last = -1;
+    state.stamps.forEach((v, i) => { if (v && (last < 0 || v >= state.stamps[last])) last = i; });
+    if (last < 0) return;
+    state.stamps[last] = null; save(); renderSettings(); render();
   });
-  $('resetBtn').addEventListener('click', () => { $('resetCount').textContent = state.stamps.length; $('resetConfirm').hidden = false; });
+  $('resetBtn').addEventListener('click', () => { $('resetCount').textContent = filled(); $('resetConfirm').hidden = false; });
   $('resetNo').addEventListener('click', () => { $('resetConfirm').hidden = true; });
-  $('resetYes').addEventListener('click', () => { state.stamps = []; save(); renderSettings(); render(); });
+  $('resetYes').addEventListener('click', () => { state.stamps = emptyCard(); save(); renderSettings(); render(); });
+  $('unbankBtn').addEventListener('click', () => {
+    if (!state.banked) return;
+    state.banked -= 1; save(); renderSettings(); render();
+  });
 
   render();
-  if (state.stamps.length >= GOAL) openWheel();
   connect();
 })();
 </script>
