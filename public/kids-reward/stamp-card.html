@@ -210,6 +210,11 @@ button.slot .n { opacity: 1; font-size: .95rem; }
 .big-choice.keep { background: var(--card); color: var(--fg); border-color: var(--sky); }
 .link-btn { font: inherit; background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; text-decoration: underline; }
 
+.multi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.multi-grid button { font-family: var(--font-display); font-size: 1.6rem; font-variant-numeric: tabular-nums; padding: 14px 0; border-radius: 16px; border: 2px solid var(--ink); background: var(--ink-soft); color: var(--ink); cursor: pointer; }
+.multi-grid button:disabled { opacity: .3; cursor: default; }
+.multi-grid button small { display: block; font-family: var(--font-body); font-size: .75rem; }
+.field select { font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%; }
 .tier { display: flex; flex-direction: column; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
 .tier label { font-family: var(--font-display); font-size: 1.1rem; }
 .tier textarea { min-height: 150px; background: var(--paper); }
@@ -266,6 +271,15 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   </div>
 </div>
 
+<div class="overlay" id="multi" hidden>
+  <div class="choice-card" role="dialog" aria-labelledby="multiTitle">
+    <h2 id="multiTitle">要蓋幾個印章？</h2>
+    <p id="multiText"></p>
+    <div class="multi-grid" id="multiGrid"></div>
+    <button class="link-btn" id="multiCancel">取消</button>
+  </div>
+</div>
+
 <div class="sheet wheel-sheet" id="wheelSheet" hidden>
   <div class="sheet-inner">
     <h2 class="wheel-title" id="wheelTitle">集滿 30 個了！轉轉看！</h2>
@@ -297,8 +311,14 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     </div>
 
     <div class="field">
+      <h3><label for="maxCards">最多可以累積幾張卡</label></h3>
+      <select id="maxCards"></select>
+      <div class="note" id="maxCardsNote"></div>
+    </div>
+
+    <div class="field">
       <h3>輪盤獎品（一行一個）</h3>
-      <div class="note">集滿的卡可以存起來。存越多張再轉，用的是越大的獎品組。每組的第一行是 1 號，抽中機率 3%，其他號碼平分剩下的 97%。</div>
+      <div class="note">存越多張再轉，用的是越大的獎品組。每組的第一行是 1 號，抽中機率 3%，其他號碼平分剩下的 97%。</div>
       <div id="tiers"></div>
     </div>
 
@@ -334,18 +354,20 @@ button.slot .n { opacity: 1; font-size: .95rem; }
 (() => {
   const GOAL = 30;
   const KEY = 'haobangbang-card-v1';
-  const TIERS = 3;
-  const TIER_NAMES = ['1 張卡（30 個印章）', '2 張卡（60 個印章）', '3 張卡以上（90 個印章）'];
+  const MAX_TIERS = 5;
+  const tierName = t => `${t + 1} 張卡（${(t + 1) * GOAL} 個印章）`;
   const EXAMPLE_TIERS = [
     ['冰淇淋一支', '多玩 30 分鐘', '挑一本新書', '小玩具一個', '決定晚餐吃什麼', '去公園野餐'],
     ['樂高一盒', '去遊樂園', '看一場電影', '多玩 1 小時', '買想要的繪本', '吃一次速食大餐'],
-    ['想要的大玩具', '去動物園', '全家出遊一天', '露營一晚', '自己挑一個大禮物', '吃大餐慶祝']
+    ['想要的大玩具', '去動物園', '全家出遊一天', '露營一晚', '自己挑一個大禮物', '吃大餐慶祝'],
+    ['新的桌遊', '去水族館', '買一套新衣服', '烤肉派對', '大盒樂高', '去兒童樂園'],
+    ['想要很久的大禮物', '出去玩兩天', '去主題樂園', '買一台新玩具車', '辦一場小派對', '全家吃大餐']
   ];
   const CHEERS = ['好棒棒！', '太厲害了！', '你做到了！', '超讚的！', '真了不起！', '繼續加油！', '好乖喔！', '給你拍拍手！'];
   const SEG_COLORS = ['--ink', '--sun', '--sky', '--leaf', '--plum'];
 
   const emptyCard = () => Array(GOAL).fill(null);
-  let state = { name: '', stamps: emptyCard(), banked: 0, tiers: EXAMPLE_TIERS.map(t => t.slice()), customTiers: [false, false, false], history: [] };
+  let state = { name: '', stamps: emptyCard(), banked: 0, maxCards: 3, tiers: EXAMPLE_TIERS.map(t => t.slice()), customTiers: EXAMPLE_TIERS.map(() => false), history: [] };
   let docRef = null;
   let saving = Promise.resolve();
 
@@ -353,7 +375,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const filled = () => state.stamps.filter(Boolean).length;
   const isFull = () => filled() >= GOAL;
-  const tierFor = cards => Math.max(1, Math.min(cards, TIERS)) - 1;
+  const tierFor = cards => Math.max(1, Math.min(cards, state.maxCards)) - 1;
   const prizesFor = cards => { const t = state.tiers[tierFor(cards)]; return t && t.length >= 2 ? t : EXAMPLE_TIERS[tierFor(cards)]; };
   const kidPrefix = () => state.name.trim() ? state.name.trim() + '，' : '';
 
@@ -368,12 +390,13 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     const stamps = emptyCard();
     if (Array.isArray(s.stamps)) s.stamps.slice(0, GOAL).forEach((v, i) => { stamps[i] = typeof v === 'string' ? v : null; });
     // older versions kept a single prize list
-    const tiers = Array.isArray(s.tiers) ? s.tiers.slice(0, TIERS) : [Array.isArray(s.prizes) ? s.prizes : null];
+    const tiers = Array.isArray(s.tiers) ? s.tiers.slice(0, MAX_TIERS) : [Array.isArray(s.prizes) ? s.prizes : null];
     const custom = Array.isArray(s.customTiers) ? s.customTiers : [!!s.customPrizes];
     return {
       name: typeof s.name === 'string' ? s.name : '',
       stamps,
       banked: Number.isInteger(s.banked) && s.banked > 0 ? s.banked : 0,
+      maxCards: Number.isInteger(s.maxCards) ? Math.max(1, Math.min(MAX_TIERS, s.maxCards)) : 3,
       tiers: EXAMPLE_TIERS.map((ex, i) => Array.isArray(tiers[i]) && tiers[i].length >= 2 ? tiers[i] : ex.slice()),
       customTiers: EXAMPLE_TIERS.map((_, i) => !!custom[i]),
       history: Array.isArray(s.history) ? s.history : []
@@ -430,7 +453,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
 
   /* ---------- render ---------- */
   function rotFor(i) { return ((i * 47) % 31) - 15; }
-  let justIndex = -1;
+  let just = [];
   function render() {
     const n = filled();
     $('title').textContent = state.name.trim() ? `${state.name.trim()}的好棒棒集點卡` : '好棒棒集點卡';
@@ -444,7 +467,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     for (let i = 0; i < GOAL; i++) {
       const has = !!state.stamps[i];
       const s = document.createElement(has ? 'div' : 'button');
-      s.className = 'slot' + (i === GOAL - 1 ? ' prize-slot' : '') + (has ? ' filled' : '') + (i === justIndex ? ' just' : '');
+      s.className = 'slot' + (i === GOAL - 1 ? ' prize-slot' : '') + (has ? ' filled' : '') + (just.includes(i) ? ' just' : '');
       s.innerHTML = `<span class="n">${i === GOAL - 1 ? '🎁' : i + 1}</span>` + (has ? stampSVG('stamp', rotFor(i)) : '');
       if (!has) {
         s.setAttribute('aria-label', `在第 ${i + 1} 格蓋印章`);
@@ -452,7 +475,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       }
       grid.appendChild(s);
     }
-    justIndex = -1;
+    just = [];
 
     const b = state.banked;
     $('bank').hidden = b === 0;
@@ -460,8 +483,8 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       $('bankCards').innerHTML = '<i class="mini"></i>'.repeat(Math.min(b, 5));
       $('bankTitle').textContent = `已經存了 ${b} 張卡`;
       const next = b + 1;
-      $('bankSub').textContent = b >= TIERS
-        ? '已經可以轉最大獎的輪盤'
+      $('bankSub').textContent = b >= state.maxCards
+        ? '已經存到最多張了，可以轉最大獎'
         : `再集滿 1 張，就能轉 ${next} 張卡的大獎`;
       $('bankSpin').hidden = isFull();
       $('bankSpin').textContent = `用 ${b} 張卡轉`;
@@ -474,7 +497,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       $('hint').textContent = '30 個印章都集滿了';
     } else {
       btn.className = 'stamp-btn';
-      btn.innerHTML = btnStamp + '<span>蓋一個好棒棒</span>';
+      btn.innerHTML = btnStamp + '<span>蓋好棒棒印章</span>';
       $('hint').textContent = '點空格裡的數字，就能在那一格蓋印章';
     }
   }
@@ -543,17 +566,21 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     setTimeout(() => { chime(); confetti(burst); }, 380);
     setTimeout(() => { $('cheer').hidden = true; cheering = false; render(); if (then) then(); }, 2100);
   }
-  function addStamp(slot) {
+  // slot: stamp that one slot; count: stamp the first `count` empty slots
+  function addStamp(slot, count = 1) {
     if (cheering) return;
     if (isFull()) { openChoice(); return; }
-    const i = Number.isInteger(slot) && !state.stamps[slot] ? slot : state.stamps.findIndex(v => !v);
-    if (i < 0) return;
-    state.stamps[i] = new Date().toISOString();
+    let targets;
+    if (Number.isInteger(slot) && !state.stamps[slot]) targets = [slot];
+    else targets = state.stamps.map((v, i) => v ? -1 : i).filter(i => i >= 0).slice(0, count);
+    if (!targets.length) return;
+    const now = new Date().toISOString();
+    targets.forEach(i => { state.stamps[i] = now; });
     const n = filled();
-    justIndex = i;
+    just = targets;
     save();
 
-    let msg = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+    let msg = targets.length > 1 ? `一次蓋了 ${targets.length} 個！` : CHEERS[Math.floor(Math.random() * CHEERS.length)];
     let msg2 = `第 ${n} 個印章，還差 ${GOAL - n} 個`;
     if (n === GOAL) { msg = '集滿 30 個了！'; msg2 = '可以轉輪盤，也可以存起來'; }
     else if (n === 15) { msg2 = `已經一半了！還差 ${GOAL - n} 個`; }
@@ -561,7 +588,24 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     if (state.name.trim() && n !== GOAL) msg = kidPrefix() + msg;
     showCheer(msg, msg2, n === GOAL ? 220 : 110, n === GOAL ? () => setTimeout(openChoice, 600) : null);
   }
-  $('stampBtn').addEventListener('click', () => addStamp());
+  function openMulti() {
+    if (cheering) return;
+    if (isFull()) { openChoice(); return; }
+    const left = GOAL - filled();
+    $('multiText').textContent = `這張卡還有 ${left} 格`;
+    const grid = $('multiGrid');
+    grid.innerHTML = '';
+    for (const k of [1, 2, 3, 4, 5, 10]) {
+      const b = document.createElement('button');
+      b.innerHTML = `${k}<small>個</small>`;
+      b.disabled = k > left;
+      b.addEventListener('click', () => { $('multi').hidden = true; addStamp(null, k); });
+      grid.appendChild(b);
+    }
+    $('multi').hidden = false;
+  }
+  $('multiCancel').addEventListener('click', () => { $('multi').hidden = true; });
+  $('stampBtn').addEventListener('click', openMulti);
   $('cheer').addEventListener('click', () => {}); // swallow taps while the animation plays
 
   /* ---------- full card: spin now or save it ---------- */
@@ -572,16 +616,20 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     $('choiceText').textContent = state.banked
       ? `加上之前存的 ${state.banked} 張，現在一共有 ${cards} 張卡。`
       : '要現在轉輪盤，還是存起來換更大的獎？';
-    $('choiceSpinSub').textContent = `用 ${cards} 張卡，轉「${TIER_NAMES[tierFor(cards)]}」的獎品`;
-    $('choiceKeepSub').textContent = cards >= TIERS
-      ? `存起來共 ${cards} 張（已經是最大獎了）`
-      : `存起來共 ${cards} 張，下次轉「${TIER_NAMES[tierFor(cards + 1)]}」的獎品`;
+    const canKeep = cards < state.maxCards;
+    if (!canKeep) $('choiceText').textContent = state.maxCards > 1
+      ? `已經累積到最多的 ${state.maxCards} 張卡了，轉最大獎吧！`
+      : '轉輪盤看看會得到什麼！';
+    $('choiceSpinSub').textContent = `用 ${cards} 張卡，轉「${tierName(tierFor(cards))}」的獎品`;
+    $('choiceKeep').hidden = !canKeep;
+    $('choiceKeepSub').textContent = `存起來共 ${cards} 張，下次轉「${tierName(tierFor(cards + 1))}」的獎品`;
     $('choice').hidden = false;
   }
   $('choiceLater').addEventListener('click', () => { $('choice').hidden = true; });
   $('choiceSpin').addEventListener('click', () => { $('choice').hidden = true; openWheel(); });
   $('choiceKeep').addEventListener('click', () => {
     $('choice').hidden = true;
+    if (state.banked + 1 >= state.maxCards) return;
     state.banked += 1;
     state.stamps = emptyCard();
     save();
@@ -749,10 +797,11 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     state.tiers[t] = list; state.customTiers[t] = true; save();
   }
   const tierBox = $('tiers');
-  TIER_NAMES.forEach((name, t) => {
+  EXAMPLE_TIERS.forEach((_, t) => {
     const box = document.createElement('div');
     box.className = 'tier';
-    box.innerHTML = `<label for="tier${t}">${name}</label><textarea id="tier${t}"></textarea><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
+    box.id = 'tierBox' + t;
+    box.innerHTML = `<label for="tier${t}" id="tierLabel${t}">${tierName(t)}</label><textarea id="tier${t}"></textarea><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
     tierBox.appendChild(box);
     $('tier' + t).addEventListener('input', e => {
       const list = parseList(e.target.value);
@@ -767,9 +816,25 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       openWheel(t + 1);
     });
   });
+  for (let k = 1; k <= MAX_TIERS; k++) {
+    const o = document.createElement('option');
+    o.value = k;
+    o.textContent = k === 1 ? '1 張（不累積，集滿就轉）' : `${k} 張`;
+    $('maxCards').appendChild(o);
+  }
+  $('maxCards').addEventListener('change', e => {
+    state.maxCards = Math.max(1, Math.min(MAX_TIERS, parseInt(e.target.value, 10) || 1));
+    save(); renderSettings(); render();
+  });
   function renderSettings() {
     $('kidName').value = state.name;
-    for (let t = 0; t < TIERS; t++) {
+    $('maxCards').value = state.maxCards;
+    $('maxCardsNote').textContent = state.maxCards === 1
+      ? '集滿 30 個就直接轉輪盤，不能存起來。'
+      : `集滿的卡最多可以存到 ${state.maxCards} 張，存到 ${state.maxCards} 張時就要轉輪盤。`;
+    for (let t = 0; t < MAX_TIERS; t++) {
+      $('tierBox' + t).hidden = t >= state.maxCards;
+      $('tierLabel' + t).textContent = tierName(t) + (t === state.maxCards - 1 && t > 0 ? '　最大獎' : '');
       $('tier' + t).value = state.tiers[t].join('\n');
       $('tierNote' + t).textContent = state.customTiers[t]
         ? '一行一個獎品，至少 2 個，最多 12 個。'
