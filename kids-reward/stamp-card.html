@@ -246,7 +246,7 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
     </div>
     <button class="stamp-btn spin-ready" id="spinBtn">轉輪盤</button>
     <div class="result" id="result" hidden>
-      <div class="label">恭喜你得到</div>
+      <div class="label" id="resultLabel">恭喜你得到</div>
       <div class="prize" id="resultPrize"></div>
       <button class="btn primary" id="newCard">收下獎品，開始新的集點卡</button>
     </div>
@@ -269,6 +269,7 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
       <h3><label for="prizeList">輪盤獎品（一行一個）</label></h3>
       <textarea id="prizeList"></textarea>
       <div class="note" id="prizeNote">目前是範例獎品，換成你們家的獎品就好。至少 2 個，最多 12 個。</div>
+      <button class="btn" id="previewWheel">預覽轉盤效果（不會記錄）</button>
     </div>
 
     <div class="field">
@@ -591,16 +592,20 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
       wx.fillStyle = i % 2 ? '#fff' : css('--sun'); wx.fill();
     }
   }
-  function openWheel() {
-    if (state.stamps.length < GOAL) return;
+  let demo = false;
+  function openWheel(preview) {
+    demo = preview === true;
+    if (!demo && state.stamps.length < GOAL) return;
     $('wheelSheet').hidden = false;
     $('result').hidden = true;
     $('spinBtn').hidden = false; $('spinBtn').disabled = false;
-    $('wheelTitle').textContent = (state.name.trim() ? state.name.trim() + '，' : '') + '集滿 30 個了！轉轉看！';
+    $('newCard').textContent = demo ? '關閉預覽' : '收下獎品，開始新的集點卡';
+    $('wheelTitle').textContent = demo ? '預覽轉盤（不會記錄）'
+      : (state.name.trim() ? state.name.trim() + '，' : '') + '集滿 30 個了！轉轉看！';
     requestAnimationFrame(drawWheel);
   }
   function spin() {
-    if (spinning || state.stamps.length < GOAL) return;
+    if (spinning || (!demo && state.stamps.length < GOAL)) return;
     spinning = true; audio();
     $('spinBtn').disabled = true;
     const list = prizes().slice(), n = list.length, seg = Math.PI * 2 / n;
@@ -625,9 +630,12 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
   }
   function finish(prize) {
     // record right away, so closing the app now never loses the prize
-    state.history.unshift({ date: new Date().toISOString(), prize });
-    state.stamps = [];
-    save();
+    if (!demo) {
+      state.history.unshift({ date: new Date().toISOString(), prize });
+      state.stamps = [];
+      save();
+    }
+    $('resultLabel').textContent = demo ? '預覽結果：會得到' : '恭喜你得到';
     rot = rot % (Math.PI * 2);
     spinning = false;
     $('spinBtn').hidden = true;
@@ -678,6 +686,13 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
     if (list.length < 2) { $('prizeNote').textContent = '至少要有 2 個獎品，輪盤才能轉。'; return; }
     $('prizeNote').textContent = `共 ${list.length} 個獎品，已儲存。`;
     prizeTimer = setTimeout(() => { state.prizes = list; state.customPrizes = true; save(); }, 600);
+  });
+  $('previewWheel').addEventListener('click', () => {
+    const list = $('prizeList').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 12);
+    clearTimeout(prizeTimer);
+    if (list.length >= 2 && list.join('\n') !== state.prizes.join('\n')) { state.prizes = list; state.customPrizes = true; save(); }
+    $('settingsSheet').hidden = true;
+    openWheel(true);
   });
   $('undoBtn').addEventListener('click', () => {
     if (!state.stamps.length) return;
