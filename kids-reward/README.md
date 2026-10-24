@@ -9,5 +9,5 @@
 修改 `stamp-card.html` 後，重新產生 `index.html`：
 
 ```bash
-cd kids-reward && { sed -n '1,6p' index.html; cat stamp-card.html; printf '\n</body></html>\n'; } > index.new && mv index.new index.html
+cd kids-reward && { sed -n '1,5p' index.html; cat stamp-card.html; printf '\n</body></html>\n'; } > index.new && mv index.new index.html
 ```
