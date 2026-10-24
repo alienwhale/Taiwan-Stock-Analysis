@@ -1,0 +1,9 @@
+{
+  "name": "好棒棒集點卡",
+  "short_name": "好棒棒",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#e9f3f5",
+  "theme_color": "#d8323e",
+  "lang": "zh-Hant"
+}
