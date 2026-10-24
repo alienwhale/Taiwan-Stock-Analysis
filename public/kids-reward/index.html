@@ -624,15 +624,9 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       wx.font = `bold ${Math.round(br * 1.25)}px Huninn, "PingFang TC", "Noto Sans TC", sans-serif`;
       wx.fillText(String(i + 1), 0, 1);
       wx.restore();
-      wx.textAlign = 'right';
       wx.fillStyle = isSun ? '#3a2a00' : '#fff';
-      let label = list[i];
-      let fs = Math.max(12, Math.min(20, size / 18));
-      wx.font = `${fs}px Huninn, "PingFang TC", "Noto Sans TC", sans-serif`;
-      const maxW = R * .5;
-      while (wx.measureText(label).width > maxW && fs > 11) { fs -= 1; wx.font = `${fs}px Huninn, "PingFang TC", "Noto Sans TC", sans-serif`; }
-      while (wx.measureText(label).width > maxW && label.length > 2) label = label.slice(0, -2) + '…';
-      wx.fillText(label, bx - br - 8, 0);
+      // the name sits between the center button (22% of the wheel) and the number badge
+      drawLabel(list[i], R * .22 + 8, bx - br - 6, seg, size, Math.cos(a0 + seg / 2) < 0);
       wx.restore();
     }
     // rim lights
@@ -642,6 +636,42 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       wx.beginPath(); wx.arc(c + Math.cos(a) * (R - 5), c + Math.sin(a) * (R - 5), 2.6, 0, Math.PI * 2);
       wx.fillStyle = i % 2 ? '#fff' : css('--sun'); wx.fill();
     }
+  }
+  const FONT = fs => `${fs}px Huninn, "PingFang TC", "Noto Sans TC", sans-serif`;
+  // Break before a parenthesis or at a space nearest the middle; never inside a number.
+  function splitLabel(t) {
+    const m = t.search(/[（(]/);
+    if (m > 0) return [t.slice(0, m).trim(), t.slice(m)];
+    const mid = t.length / 2;
+    let best = -1;
+    for (let i = 1; i < t.length - 1; i++) if (t[i] === ' ' && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+    if (best > 0) return [t.slice(0, best), t.slice(best + 1)];
+    let h = Math.ceil(mid);
+    while (h < t.length - 1 && /\d/.test(t[h - 1]) && /\d/.test(t[h])) h++;
+    return [t.slice(0, h), t.slice(h)];
+  }
+  // Fit a prize name on one line, else two, shrinking the font before ever cutting text.
+  // flip: names on the left half are turned around so they never read upside down.
+  function drawLabel(text, inner, outer, seg, size, flip) {
+    const avail = outer - inner;
+    const maxH = 2 * inner * Math.sin(seg / 2) * .9;
+    const start = Math.max(12, Math.min(20, size / 18));
+    const fits = (ls, f) => {
+      wx.font = FONT(f);
+      return ls.every(l => wx.measureText(l).width <= avail) && ls.length * f * 1.15 <= Math.max(maxH, f * 1.2);
+    };
+    let lines = [text], fs = start;
+    while (!fits(lines, fs) && fs > 14) fs--;
+    if (!fits(lines, fs) && text.length > 1) {
+      lines = splitLabel(text); fs = start;
+      while (!fits(lines, fs) && fs > 10) fs--;
+    }
+    wx.font = FONT(fs);
+    lines = lines.map(l => { while (wx.measureText(l).width > avail && l.length > 1) l = l.slice(0, -2) + '…'; return l; });
+    wx.save(); wx.translate((inner + outer) / 2, 0); if (flip) wx.rotate(Math.PI);
+    wx.textAlign = 'center';
+    lines.forEach((l, j) => wx.fillText(l, 0, (j - (lines.length - 1) / 2) * fs * 1.15));
+    wx.restore();
   }
   // preview: number of cards to preview; otherwise spends every saved card (plus this one if it is full)
   function openWheel(preview) {
@@ -658,7 +688,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     $('wheelBack').hidden = false;
     $('newCard').textContent = demo ? '關閉預覽' : '收下獎品';
     $('wheelTitle').textContent = demo
-      ? `預覽「${TIER_NAMES[tierFor(wheelCards)]}」的輪盤（不會記錄）`
+      ? `預覽：${wheelCards} 張卡的獎品`
       : `${kidPrefix()}用 ${wheelCards} 張卡轉輪盤！`;
     requestAnimationFrame(drawWheel);
   }
