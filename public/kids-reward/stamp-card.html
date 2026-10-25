@@ -215,6 +215,15 @@ button.slot .n { opacity: 1; font-size: .95rem; }
 .multi-grid button:disabled { opacity: .3; cursor: default; }
 .multi-grid button small { display: block; font-family: var(--font-body); font-size: .75rem; }
 .field select { font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%; }
+.prows { display: flex; flex-direction: column; gap: 8px; }
+.prow { display: flex; align-items: center; gap: 6px; }
+.prow input { font: inherit; color: var(--fg); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; box-sizing: border-box; }
+.prow .pname { flex: 1 1 auto; width: 100%; }
+.prow .pp { width: 76px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.prow .pct { color: var(--muted); }
+.prow .pdel { font: inherit; border: none; background: none; color: var(--muted); font-size: 1.1rem; padding: 6px; cursor: pointer; }
+.prow .pdel:disabled { opacity: .25; cursor: default; }
+.note.err { color: var(--ink); }
 .tier { display: flex; flex-direction: column; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
 .tier label { font-family: var(--font-display); font-size: 1.1rem; }
 .tier textarea { min-height: 150px; background: var(--paper); }
@@ -317,8 +326,8 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     </div>
 
     <div class="field">
-      <h3>輪盤獎品（一行一個）</h3>
-      <div class="note">存越多張再轉，用的是越大的獎品組。每組的第一行是 1 號，抽中機率 3%，其他號碼平分剩下的 97%。</div>
+      <h3>輪盤獎品與機率</h3>
+      <div class="note">存越多張再轉，用的是越大的獎品組。每組預設 1 號 3%，其他號碼平分剩下的 97%；每個號碼的機率都可以自己改，合計要 100%。</div>
       <div id="tiers"></div>
     </div>
 
@@ -356,15 +365,42 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   const KEY = 'haobangbang-card-v1';
   const MAX_TIERS = 20;
   const tierName = t => `${t + 1} 張卡（${(t + 1) * GOAL} 個印章）`;
+  const MAX_PRIZES = 12;
   const EXAMPLE_TIERS = [
     ['冰淇淋一支', '多玩 30 分鐘', '挑一本新書', '小玩具一個', '決定晚餐吃什麼', '去公園野餐'],
     ['樂高一盒', '去遊樂園', '看一場電影', '多玩 1 小時', '買想要的繪本', '吃一次速食大餐'],
     ['想要的大玩具', '去動物園', '全家出遊一天', '露營一晚', '自己挑一個大禮物', '吃大餐慶祝'],
     ['新的桌遊', '去水族館', '買一套新衣服', '烤肉派對', '大盒樂高', '去兒童樂園'],
-    ['想要很久的大禮物', '出去玩兩天', '去主題樂園', '買一台新玩具車', '辦一場小派對', '全家吃大餐']
+    ['想要很久的大禮物', '出去玩兩天', '去主題樂園', '買一台新玩具車', '辦一場小派對', '全家吃大餐'],
+    ['買一雙新球鞋', '去海邊玩一天', '遙控直升機', '去九份吃芋圓', '吃到飽一餐', '晚睡一次'],
+    ['住一晚飯店', '去看一場表演', '機器人組裝包', '去溫泉泡湯', '全家去吃大餐', '玩一整天的遊戲'],
+    ['去野生動物園', '一台小相機', '露營區玩兩天', '遊樂園玩一整天', '去看棒球比賽', '很想要的一個玩具'],
+    ['墾丁玩三天', '去動物園住一晚', '滑板一組', '大型積木組', '日式料理大餐', '科學館一整天'],
+    ['墾丁玩兩天', '遙控賽車', '科學館住宿體驗', '去看音樂劇', '整套喜歡的繪本', '高級餐廳一餐'],
+    ['國內旅行兩天', '最新款遊戲機', '大型城堡積木', '全家一起去旅行', '寵物店挑一隻小動物', '高級飯店吃早餐'],
+    ['國內旅行三天', '最新款遊戲片', '水族館導覽', '大型模型組', '一台腳踏車', '高級餐廳吃一餐'],
+    ['國內旅行四天', '遙控無人機', '主題樂園門票', '大型積木城堡', '全家一日遊', '生日派對一場'],
+    ['國內旅行一週', '阿里山看日出', '游泳池包場', '大型禮物盒', '全家高級餐廳', '一台平板電腦'],
+    ['日本旅行三天', '台北 101 看夜景', '一台小平板', '生日派對一場', '全家出國一週', '大型玩具車'],
+    ['日本旅行一週', '一台筆電', '一次主題旅行', '大型禮物', '去看演唱會', '想要的新衣服'],
+    ['出國玩十天', '一台好的相機', '大型遊戲主機', '全家海外旅行', '想要的家電', '大型禮物一份'],
+    ['出國玩兩週', '一台好的電腦', '大型樂高模型', '全家豪華旅行', '一間小房間裝修', '大型禮物一份'],
+    ['出國玩一個月', '一輛電動車玩具', '全家夢想旅行', '房間大改造', '想要的大型家電', '一份大禮'],
+    ['大獎：全家旅行一個月', '一台好的電腦', '一台電動車玩具', '房間大改造', '想要的大型家電', '一份大禮'],
   ];
-  // tiers past the last example set reuse it, so every level has a starter prize list
-  const exampleFor = t => EXAMPLE_TIERS[Math.min(t, EXAMPLE_TIERS.length - 1)].slice();
+  // Starter chances: No. 1 gets 3%, the rest split the remaining 97% evenly (any remainder goes to the last number).
+  function defaultChances(n) {
+    if (n === 1) return [1000];
+    const rest = 970, base = Math.floor(rest / (n - 1)), out = [30];
+    for (let i = 1; i < n; i++) out.push(base + (i === n - 1 ? rest - base * (n - 1) : 0));
+    return out;
+  }
+  // Starter prizes for each level; levels past the list reuse the last set.
+  const exampleFor = t => {
+    const names = EXAMPLE_TIERS[Math.min(t, EXAMPLE_TIERS.length - 1)];
+    const p = defaultChances(names.length);
+    return names.map((n, i) => ({ n, p: p[i] }));
+  };
   const CHEERS = ['好棒棒！', '太厲害了！', '你做到了！', '超讚的！', '真了不起！', '繼續加油！', '好乖喔！', '給你拍拍手！'];
   const SEG_COLORS = ['--ink', '--sun', '--sky', '--leaf', '--plum'];
 
@@ -378,7 +414,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   const filled = () => state.stamps.filter(Boolean).length;
   const isFull = () => filled() >= GOAL;
   const tierFor = cards => Math.max(1, Math.min(cards, state.maxCards)) - 1;
-  const prizesFor = cards => { const t = state.tiers[tierFor(cards)]; return t && t.length >= 2 ? t : exampleFor(tierFor(cards)); };
+  const prizesFor = cards => { const t = (state.tiers[tierFor(cards)] || []).filter(x => x.n.trim()); return t.length >= 2 ? t : exampleFor(tierFor(cards)); };
   const kidPrefix = () => state.name.trim() ? state.name.trim() + '，' : '';
 
   /* ---------- storage: artifact db when available, phone storage otherwise ---------- */
@@ -387,6 +423,15 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   }
   function writeLocal() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  function normTier(list, t) {
+    if (!Array.isArray(list)) return exampleFor(t);
+    const items = list.slice(0, MAX_PRIZES).map(x => typeof x === 'string'
+      ? { n: x.slice(0, 20), p: null }
+      : { n: String(x && x.n || '').slice(0, 20), p: x && Number.isFinite(x.p) ? Math.max(0, Math.min(1000, Math.round(x.p))) : null });
+    if (items.length < 2) return exampleFor(t);
+    if (items.some(x => x.p === null)) { const p = defaultChances(items.length); items.forEach((x, i) => { x.p = p[i]; }); }
+    return items;
   }
   function normalize(s) {
     const stamps = emptyCard();
@@ -399,7 +444,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       stamps,
       banked: Number.isInteger(s.banked) && s.banked > 0 ? s.banked : 0,
       maxCards: Number.isInteger(s.maxCards) ? Math.max(1, Math.min(MAX_TIERS, s.maxCards)) : 3,
-      tiers: Array.from({ length: MAX_TIERS }, (_, i) => Array.isArray(tiers[i]) && tiers[i].length >= 2 ? tiers[i] : exampleFor(i)),
+      tiers: Array.from({ length: MAX_TIERS }, (_, i) => normTier(tiers[i], i)),
       customTiers: Array.from({ length: MAX_TIERS }, (_, i) => !!custom[i]),
       history: Array.isArray(s.history) ? s.history : []
     };
@@ -647,7 +692,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     const size = wc.clientWidth || 320, dpr = devicePixelRatio || 1;
     if (wc.width !== Math.round(size * dpr)) { wc.width = Math.round(size * dpr); wc.height = Math.round(size * dpr); }
     wx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const list = prizesFor(wheelCards), n = list.length, seg = Math.PI * 2 / n, R = size / 2, c = R;
+    const list = prizesFor(wheelCards).map(x => x.n), n = list.length, seg = Math.PI * 2 / n, R = size / 2, c = R;
     wx.clearRect(0, 0, size, size);
     wx.beginPath(); wx.arc(c, c, R - 2, 0, Math.PI * 2); wx.fillStyle = css('--card'); wx.fill();
     for (let i = 0; i < n; i++) {
@@ -736,15 +781,21 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       : `${kidPrefix()}用 ${wheelCards} 張卡轉輪盤！`;
     requestAnimationFrame(drawWheel);
   }
+  // Draw a prize by its chance. Chances that do not add up to 100% are scaled to their total.
+  function pickPrize(list) {
+    const total = list.reduce((a, x) => a + x.p, 0);
+    if (total <= 0) return Math.floor(Math.random() * list.length);
+    let r = Math.random() * total;
+    for (let i = 0; i < list.length; i++) { r -= list[i].p; if (r < 0) return i; }
+    return list.length - 1;
+  }
   function spin() {
     if (spinning) return;
     spinning = true; audio();
     $('spinBtn').disabled = true;
     $('wheelBack').hidden = true;
     const list = prizesFor(wheelCards).slice(), n = list.length, seg = Math.PI * 2 / n;
-    // No. 1 wins 3% of the time; the other numbers share the remaining 97% equally
-    const r = Math.random();
-    const k = r < .03 ? 0 : Math.min(n - 1, 1 + Math.floor((r - .03) / .97 * (n - 1)));
+    const k = pickPrize(list);
     const jitter = (Math.random() - .5) * .7;
     let target = -Math.PI / 2 - (k + .5 + jitter) * seg;
     const start = rot;
@@ -759,7 +810,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       const cur = Math.floor(((-Math.PI / 2 - rot) / seg % n + n) % n);
       if (cur !== lastSeg) { tick(); lastSeg = cur; }
       drawWheel();
-      if (t < 1) requestAnimationFrame(frame); else finish(`${k + 1} 號　${list[k]}`);
+      if (t < 1) requestAnimationFrame(frame); else finish(`${k + 1} 號　${list[k].n}`);
     }
     requestAnimationFrame(frame);
   }
@@ -791,29 +842,53 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     const d = new Date(iso);
     return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
   }
-  const parseList = text => text.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 12);
-  const tierTimers = [];
-  function commitTier(t, list) {
-    clearTimeout(tierTimers[t]);
-    if (list.length < 2 || list.join('\n') === state.tiers[t].join('\n')) return;
-    state.tiers[t] = list; state.customTiers[t] = true; save();
-  }
   const tierBox = $('tiers');
+  let tierSaveTimer;
+  function saveSoon() { clearTimeout(tierSaveTimer); tierSaveTimer = setTimeout(save, 500); }
+  function updateTotal(t) {
+    const sum = state.tiers[t].reduce((a, x) => a + (x.n.trim() ? x.p : 0), 0);
+    const el = $('total' + t);
+    el.textContent = `機率合計：${(sum / 10).toFixed(1)}%` + (sum === 1000 ? '（剛好 100%）' : '　還沒到 100%，轉盤會依比例換算，建議調整到 100%');
+    el.classList.toggle('err', sum !== 1000);
+  }
+  function renderRows(t) {
+    const list = state.tiers[t], box = $('rows' + t);
+    box.innerHTML = '';
+    list.forEach((item, i) => {
+      const row = document.createElement('div');
+      row.className = 'prow';
+      row.innerHTML = '<input class="pname" type="text" maxlength="20" placeholder="獎品名稱"><input class="pp" type="number" min="0" max="100" step="0.1" aria-label="機率（%）"><span class="pct">%</span><button class="pdel" aria-label="刪除這個獎品">✕</button>';
+      const name = row.querySelector('.pname'), pp = row.querySelector('.pp'), del = row.querySelector('.pdel');
+      name.value = item.n;
+      pp.value = (item.p / 10).toFixed(1);
+      name.addEventListener('input', () => { item.n = name.value.slice(0, 20); state.customTiers[t] = true; updateTotal(t); saveSoon(); });
+      pp.addEventListener('input', () => {
+        const v = parseFloat(pp.value);
+        item.p = Number.isFinite(v) ? Math.max(0, Math.min(1000, Math.round(v * 10))) : 0;
+        state.customTiers[t] = true; updateTotal(t); saveSoon();
+      });
+      del.disabled = list.length <= 2;
+      del.addEventListener('click', () => { list.splice(i, 1); state.customTiers[t] = true; renderRows(t); save(); });
+      box.appendChild(row);
+    });
+    $('add' + t).disabled = list.length >= MAX_PRIZES;
+    updateTotal(t);
+  }
   Array.from({ length: MAX_TIERS }).forEach((_, t) => {
     const box = document.createElement('div');
     box.className = 'tier';
     box.id = 'tierBox' + t;
-    box.innerHTML = `<label for="tier${t}" id="tierLabel${t}">${tierName(t)}</label><textarea id="tier${t}"></textarea><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
+    box.innerHTML = `<label id="tierLabel${t}">${tierName(t)}</label><div class="prows" id="rows${t}"></div><div class="row"><button class="btn" id="add${t}">＋ 新增獎品</button></div><div class="note" id="total${t}"></div><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
     tierBox.appendChild(box);
-    $('tier' + t).addEventListener('input', e => {
-      const list = parseList(e.target.value);
-      clearTimeout(tierTimers[t]);
-      if (list.length < 2) { $('tierNote' + t).textContent = '至少要有 2 個獎品，輪盤才能轉。'; return; }
-      $('tierNote' + t).textContent = `共 ${list.length} 個獎品，已儲存。`;
-      tierTimers[t] = setTimeout(() => commitTier(t, list), 600);
+    $('add' + t).addEventListener('click', () => {
+      if (state.tiers[t].length >= MAX_PRIZES) return;
+      state.tiers[t].push({ n: '', p: 0 }); state.customTiers[t] = true;
+      renderRows(t); save();
+      $('rows' + t).lastElementChild.querySelector('.pname').focus();
     });
     $('tierPreview' + t).addEventListener('click', () => {
-      commitTier(t, parseList($('tier' + t).value));
+      if (state.tiers[t].filter(x => x.n.trim()).length < 2) { $('tierNote' + t).textContent = '至少要有 2 個有名字的獎品，才能轉。'; return; }
+      clearTimeout(tierSaveTimer); save();
       $('settingsSheet').hidden = true;
       openWheel(t + 1);
     });
@@ -837,10 +912,10 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     for (let t = 0; t < MAX_TIERS; t++) {
       $('tierBox' + t).hidden = t >= state.maxCards;
       $('tierLabel' + t).textContent = tierName(t) + (t === state.maxCards - 1 && t > 0 ? '　最大獎' : '');
-      $('tier' + t).value = state.tiers[t].join('\n');
+      renderRows(t);
       $('tierNote' + t).textContent = state.customTiers[t]
-        ? '一行一個獎品，至少 2 個，最多 12 個。'
-        : '目前是範例獎品，換成你們家的獎品就好。一行一個，至少 2 個，最多 12 個。';
+        ? '名字和機率都可以改，至少 2 個，最多 12 個。'
+        : '目前是範例獎品，換成你們家的獎品就好。至少 2 個，最多 12 個。';
     }
     $('undoBtn').disabled = filled() === 0;
     $('resetBtn').disabled = filled() === 0;
