@@ -227,6 +227,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
 .prow .pname { flex: 1 1 auto; width: 100%; }
 .prow .pp { width: 76px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
 .prow .pct { color: var(--muted); }
+.prow .plabel { font-family: var(--font-display); font-size: 1.1rem; color: var(--ink); width: 1.6em; text-align: center; flex: none; }
 .prow .pdel { font: inherit; border: none; background: none; color: var(--muted); font-size: 1.1rem; padding: 6px; cursor: pointer; }
 .prow .pdel:disabled { opacity: .25; cursor: default; }
 .note.err { color: var(--ink); }
@@ -333,7 +334,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
 
     <div class="field">
       <h3>輪盤獎品與機率</h3>
-      <div class="note">存越多張再轉，用的是越大的獎品組。每組預設 1 號 3%，其他號碼平分剩下的 97%；每個號碼的機率都可以自己改，合計要 100%。</div>
+      <div class="note">存越多張再轉，用的是越大的獎品組。每組的選項依序標示 A、B、C…，預設 A 為 3%，其他選項平分剩下的 97%；每個選項的機率都可以自己改，合計要 100%。</div>
       <div id="tiers"></div>
     </div>
 
@@ -371,7 +372,8 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   const KEY = 'haobangbang-card-v1';
   const MAX_TIERS = 20;
   const tierName = t => `${t + 1} 張卡（${(t + 1) * GOAL} 個印章）`;
-  const MAX_PRIZES = 12;
+  const MAX_PRIZES = 12, MIN_PRIZES = 3;
+  const letter = k => String.fromCharCode(65 + k); // 0 -> A
   const EXAMPLE_TIERS = [
     ['冰淇淋一支', '多玩 30 分鐘', '挑一本新書', '小玩具一個', '決定晚餐吃什麼', '去公園野餐'],
     ['樂高一盒', '去遊樂園', '看一場電影', '多玩 1 小時', '買想要的繪本', '吃一次速食大餐'],
@@ -420,7 +422,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   const filled = () => state.stamps.filter(Boolean).length;
   const isFull = () => filled() >= GOAL;
   const tierFor = cards => Math.max(1, Math.min(cards, state.maxCards)) - 1;
-  const prizesFor = cards => { const t = (state.tiers[tierFor(cards)] || []).filter(x => x.n.trim()); return t.length >= 2 ? t : exampleFor(tierFor(cards)); };
+  const prizesFor = cards => { const t = (state.tiers[tierFor(cards)] || []).filter(x => x.n.trim()); return t.length >= MIN_PRIZES ? t : exampleFor(tierFor(cards)); };
   const kidPrefix = () => state.name.trim() ? state.name.trim() + '，' : '';
 
   /* ---------- storage: artifact db when available, phone storage otherwise ---------- */
@@ -435,7 +437,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     const items = list.slice(0, MAX_PRIZES).map(x => typeof x === 'string'
       ? { n: x.slice(0, 20), p: null }
       : { n: String(x && x.n || '').slice(0, 20), p: x && Number.isFinite(x.p) ? Math.max(0, Math.min(1000, Math.round(x.p))) : null });
-    if (items.length < 2) return exampleFor(t);
+    if (items.length < MIN_PRIZES) return exampleFor(t);
     if (items.some(x => x.p === null)) { const p = defaultChances(items.length); items.forEach((x, i) => { x.p = p[i]; }); }
     return items;
   }
@@ -717,7 +719,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       wx.save(); wx.translate(bx, 0); wx.rotate(-(a0 + seg / 2)); // keep digits upright so 6 never reads as 9
       wx.textAlign = 'center'; wx.fillStyle = isSun ? '#3a2a00' : col;
       wx.font = `bold ${Math.round(br * 1.25)}px Huninn, "PingFang TC", "Noto Sans TC", sans-serif`;
-      wx.fillText(String(i + 1), 0, 1);
+      wx.fillText(letter(i), 0, 1);
       wx.restore();
       wx.fillStyle = isSun ? '#3a2a00' : '#fff';
       // the name sits between the center button (22% of the wheel) and the number badge
@@ -816,7 +818,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       const cur = Math.floor(((-Math.PI / 2 - rot) / seg % n + n) % n);
       if (cur !== lastSeg) { tick(); lastSeg = cur; }
       drawWheel();
-      if (t < 1) requestAnimationFrame(frame); else finish(`${k + 1} 號　${list[k].n}`);
+      if (t < 1) requestAnimationFrame(frame); else finish(`${letter(k)}　${list[k].n}`);
     }
     requestAnimationFrame(frame);
   }
@@ -874,12 +876,14 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   function renderRows(t) {
     const list = state.tiers[t], box = $('rows' + t);
     box.innerHTML = '';
+    let named = -1;
     list.forEach((item, i) => {
       const row = document.createElement('div');
       row.className = 'prow';
-      row.innerHTML = '<input class="pname" type="text" maxlength="20" placeholder="獎品名稱"><input class="pp" type="number" min="0" max="100" step="0.1" aria-label="機率（%）"><span class="pct">%</span><button class="pdel" aria-label="刪除這個獎品">✕</button>';
+      row.innerHTML = '<span class="plabel"></span><input class="pname" type="text" maxlength="20" placeholder="獎品名稱"><input class="pp" type="number" min="0" max="100" step="0.1" aria-label="機率（%）"><span class="pct">%</span><button class="pdel" aria-label="刪除這個獎品">✕</button>';
       const name = row.querySelector('.pname'), pp = row.querySelector('.pp'), del = row.querySelector('.pdel');
       name.value = item.n;
+      row.querySelector('.plabel').textContent = item.n.trim() ? letter(++named) : '–';
       pp.value = (item.p / 10).toFixed(1);
       name.addEventListener('input', () => { item.n = name.value.slice(0, 20); state.customTiers[t] = true; updateTotal(t); saveSoon(); });
       pp.addEventListener('input', () => {
@@ -890,7 +894,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
         $('rows' + t).querySelectorAll('.pp').forEach((el, j) => { if (j !== i) el.value = (list[j].p / 10).toFixed(1); });
         state.customTiers[t] = true; updateTotal(t); saveSoon();
       });
-      del.disabled = list.length <= 2;
+      del.disabled = list.length <= MIN_PRIZES;
       del.addEventListener('click', () => { list.splice(i, 1); spread(list, -1); state.customTiers[t] = true; renderRows(t); save(); });
       box.appendChild(row);
     });
@@ -910,7 +914,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       $('rows' + t).lastElementChild.querySelector('.pname').focus();
     });
     $('tierPreview' + t).addEventListener('click', () => {
-      if (state.tiers[t].filter(x => x.n.trim()).length < 2) { $('tierNote' + t).textContent = '至少要有 2 個有名字的獎品，才能轉。'; return; }
+      if (state.tiers[t].filter(x => x.n.trim()).length < MIN_PRIZES) { $('tierNote' + t).textContent = `至少要有 ${MIN_PRIZES} 個有名字的獎品，才能轉。`; return; }
       clearTimeout(tierSaveTimer); save();
       $('settingsSheet').hidden = true;
       openWheel(t + 1);
@@ -937,8 +941,8 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       $('tierLabel' + t).textContent = tierName(t) + (t === state.maxCards - 1 && t > 0 ? '　最大獎' : '');
       renderRows(t);
       $('tierNote' + t).textContent = state.customTiers[t]
-        ? '名字和機率都可以改，至少 2 個，最多 12 個。'
-        : '目前是範例獎品，換成你們家的獎品就好。至少 2 個，最多 12 個。';
+        ? `名字和機率都可以改，至少 ${MIN_PRIZES} 個，最多 ${MAX_PRIZES} 個。`
+        : `目前是範例獎品，換成你們家的獎品就好。至少 ${MIN_PRIZES} 個，最多 ${MAX_PRIZES} 個。`;
     }
     $('undoBtn').disabled = filled() === 0;
     $('resetBtn').disabled = filled() === 0;
