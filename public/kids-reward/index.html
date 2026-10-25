@@ -188,6 +188,7 @@ canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-
 .history .d { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .9rem; }
 .empty { color: var(--muted); font-size: .9rem; }
 .confirm { background: var(--ink-soft); border: 1px solid var(--ink); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.sheet.wheel-sheet { z-index: 55; }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 
 /* Tappable empty slots */
@@ -364,6 +365,16 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   </div>
 </div>
 
+<div class="overlay" id="leaveAsk" hidden style="z-index: 70">
+  <div class="choice-card" role="dialog" aria-labelledby="askTitle">
+    <h2 id="askTitle">要儲存這次的修改嗎？</h2>
+    <p>儲存後，修改會套用到之後的集點卡和轉盤。不儲存的話，會回到原本的設定。</p>
+    <button class="big-choice spin" id="askSave"><b>儲存修改</b></button>
+    <button class="big-choice keep" id="askDiscard"><b>不儲存，回到原本設定</b></button>
+    <button class="link-btn" id="askStay">繼續編輯</button>
+  </div>
+</div>
+
 <canvas id="confetti"></canvas>
 
 <script>
@@ -480,7 +491,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     let first = true;
     docRef.onSnapshot(snap => {
       if (snap.metadata.hasPendingWrites) return;
-      if (snap.exists) {
+      if (snap.exists && !editingSettings()) {
         state = normalize(snap.data());
         writeLocal();
         render();
@@ -851,8 +862,6 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
   }
   const tierBox = $('tiers');
-  let tierSaveTimer;
-  function saveSoon() { clearTimeout(tierSaveTimer); tierSaveTimer = setTimeout(save, 500); }
   function updateTotal(t) {
     const sum = state.tiers[t].reduce((a, x) => a + (x.n.trim() ? x.p : 0), 0);
     const el = $('total' + t);
@@ -885,17 +894,17 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       name.value = item.n;
       row.querySelector('.plabel').textContent = item.n.trim() ? letter(++named) : '–';
       pp.value = (item.p / 10).toFixed(1);
-      name.addEventListener('input', () => { item.n = name.value.slice(0, 20); state.customTiers[t] = true; updateTotal(t); saveSoon(); });
+      name.addEventListener('input', () => { item.n = name.value.slice(0, 20); state.customTiers[t] = true; updateTotal(t); });
       pp.addEventListener('input', () => {
         const v = parseFloat(pp.value);
         item.p = Number.isFinite(v) ? Math.max(0, Math.min(1000, Math.round(v * 10))) : 0;
         spread(list, i);
         // show the new chances on the other rows without redrawing (keeps focus while typing)
         $('rows' + t).querySelectorAll('.pp').forEach((el, j) => { if (j !== i) el.value = (list[j].p / 10).toFixed(1); });
-        state.customTiers[t] = true; updateTotal(t); saveSoon();
+        state.customTiers[t] = true; updateTotal(t);
       });
       del.disabled = list.length <= MIN_PRIZES;
-      del.addEventListener('click', () => { list.splice(i, 1); spread(list, -1); state.customTiers[t] = true; renderRows(t); save(); });
+      del.addEventListener('click', () => { list.splice(i, 1); spread(list, -1); state.customTiers[t] = true; renderRows(t); });
       box.appendChild(row);
     });
     $('add' + t).disabled = list.length >= MAX_PRIZES;
@@ -910,13 +919,11 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     $('add' + t).addEventListener('click', () => {
       if (state.tiers[t].length >= MAX_PRIZES) return;
       state.tiers[t].push({ n: '', p: 0 }); state.customTiers[t] = true;
-      renderRows(t); save();
+      renderRows(t);
       $('rows' + t).lastElementChild.querySelector('.pname').focus();
     });
     $('tierPreview' + t).addEventListener('click', () => {
       if (state.tiers[t].filter(x => x.n.trim()).length < MIN_PRIZES) { $('tierNote' + t).textContent = `至少要有 ${MIN_PRIZES} 個有名字的獎品，才能轉。`; return; }
-      clearTimeout(tierSaveTimer); save();
-      $('settingsSheet').hidden = true;
       openWheel(t + 1);
     });
   });
@@ -928,7 +935,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   }
   $('maxCards').addEventListener('change', e => {
     state.maxCards = Math.max(1, Math.min(MAX_TIERS, parseInt(e.target.value, 10) || 1));
-    save(); renderSettings(); render();
+    renderSettings(); render();
   });
   function renderSettings() {
     $('kidName').value = state.name;
@@ -958,25 +965,55 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       li.append(a, b); h.appendChild(li);
     }
   }
-  $('openSettings').addEventListener('click', () => { renderSettings(); $('settingsSheet').hidden = false; });
-  $('closeSettings').addEventListener('click', () => { $('settingsSheet').hidden = true; render(); });
-  let nameTimer;
-  $('kidName').addEventListener('input', e => {
-    state.name = e.target.value.slice(0, 12);
-    clearTimeout(nameTimer); nameTimer = setTimeout(save, 600);
+  /* ---------- settings: edits are a draft until 儲存 ---------- */
+  const settingsSnapshot = () => JSON.stringify({ name: state.name, maxCards: state.maxCards, tiers: state.tiers, customTiers: state.customTiers, stamps: state.stamps, banked: state.banked });
+  let baseline = '';
+  const isDirty = () => settingsSnapshot() !== baseline;
+  const settingsOpen = () => !$('settingsSheet').hidden;
+  const editingSettings = () => settingsOpen() && isDirty();
+  let stayNeedsEntry = false;
+  function openSettings() {
+    baseline = settingsSnapshot();
+    renderSettings();
+    $('settingsSheet').hidden = false;
+    history.pushState({ settings: true }, '');   // so the phone's back button asks first
+  }
+  function closeSettingsSheet() {
+    $('settingsSheet').hidden = true;
+    $('leaveAsk').hidden = true;
+    if (history.state && history.state.settings) history.back();
+    render();
+  }
+  function requestClose() {
+    if (isDirty()) $('leaveAsk').hidden = false;
+    else closeSettingsSheet();
+  }
+  $('openSettings').addEventListener('click', openSettings);
+  $('closeSettings').addEventListener('click', requestClose);
+  window.addEventListener('popstate', () => {
+    if (!settingsOpen()) return;
+    stayNeedsEntry = true;   // the back press already removed our history entry
+    requestClose();
   });
+  $('askSave').addEventListener('click', () => { save(); baseline = settingsSnapshot(); closeSettingsSheet(); });
+  $('askDiscard').addEventListener('click', () => { Object.assign(state, JSON.parse(baseline)); closeSettingsSheet(); });
+  $('askStay').addEventListener('click', () => {
+    $('leaveAsk').hidden = true;
+    if (stayNeedsEntry) { stayNeedsEntry = false; history.pushState({ settings: true }, ''); }
+  });
+  $('kidName').addEventListener('input', e => { state.name = e.target.value.slice(0, 12); });
   $('undoBtn').addEventListener('click', () => {
     let last = -1;
     state.stamps.forEach((v, i) => { if (v && (last < 0 || v >= state.stamps[last])) last = i; });
     if (last < 0) return;
-    state.stamps[last] = null; save(); renderSettings(); render();
+    state.stamps[last] = null; renderSettings(); render();
   });
   $('resetBtn').addEventListener('click', () => { $('resetCount').textContent = filled(); $('resetConfirm').hidden = false; });
   $('resetNo').addEventListener('click', () => { $('resetConfirm').hidden = true; });
-  $('resetYes').addEventListener('click', () => { state.stamps = emptyCard(); save(); renderSettings(); render(); });
+  $('resetYes').addEventListener('click', () => { state.stamps = emptyCard(); renderSettings(); render(); });
   $('unbankBtn').addEventListener('click', () => {
     if (!state.banked) return;
-    state.banked -= 1; save(); renderSettings(); render();
+    state.banked -= 1; renderSettings(); render();
   });
 
   render();
