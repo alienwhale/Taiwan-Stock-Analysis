@@ -857,6 +857,20 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     el.textContent = `機率合計：${(sum / 10).toFixed(1)}%` + (sum === 1000 ? '（剛好 100%）' : '　還沒到 100%，轉盤會依比例換算，建議調整到 100%');
     el.classList.toggle('err', sum !== 1000);
   }
+  // Keep the chance at `fixed` as it is and share the rest (1000 tenths = 100%) across the other prizes,
+  // in proportion to their current chances. fixed = -1 shares the whole 100%. Rounded so the total is exact.
+  function spread(list, fixed) {
+    const others = list.map((_, j) => j).filter(j => j !== fixed);
+    if (!others.length) return;
+    const target = 1000 - (fixed >= 0 ? list[fixed].p : 0);
+    const oldSum = others.reduce((a, j) => a + list[j].p, 0);
+    const raw = others.map(j => oldSum > 0 ? list[j].p * target / oldSum : target / others.length);
+    const out = raw.map(Math.floor);
+    const left = target - out.reduce((a, b) => a + b, 0);
+    raw.map((r, k) => ({ k, f: r - Math.floor(r) })).sort((a, b) => b.f - a.f)
+      .slice(0, Math.max(0, left)).forEach(o => { out[o.k]++; });
+    others.forEach((j, k) => { list[j].p = out[k]; });
+  }
   function renderRows(t) {
     const list = state.tiers[t], box = $('rows' + t);
     box.innerHTML = '';
@@ -871,10 +885,13 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       pp.addEventListener('input', () => {
         const v = parseFloat(pp.value);
         item.p = Number.isFinite(v) ? Math.max(0, Math.min(1000, Math.round(v * 10))) : 0;
+        spread(list, i);
+        // show the new chances on the other rows without redrawing (keeps focus while typing)
+        $('rows' + t).querySelectorAll('.pp').forEach((el, j) => { if (j !== i) el.value = (list[j].p / 10).toFixed(1); });
         state.customTiers[t] = true; updateTotal(t); saveSoon();
       });
       del.disabled = list.length <= 2;
-      del.addEventListener('click', () => { list.splice(i, 1); state.customTiers[t] = true; renderRows(t); save(); });
+      del.addEventListener('click', () => { list.splice(i, 1); spread(list, -1); state.customTiers[t] = true; renderRows(t); save(); });
       box.appendChild(row);
     });
     $('add' + t).disabled = list.length >= MAX_PRIZES;
