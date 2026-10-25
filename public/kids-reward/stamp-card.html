@@ -84,7 +84,7 @@ h1 { font-family: var(--font-display); font-size: 1.65rem; margin: 0; text-wrap:
 .slot.prize-slot { border-color: var(--sun); }
 .slot.prize-slot .n { color: var(--fg); opacity: 1; }
 .slot svg.stamp { position: absolute; inset: -6%; width: 112%; height: 112%; }
-.slot.filled { border-color: transparent; }
+.slot.filled { border-color: transparent; cursor: pointer; }
 .slot.filled .n { display: none; }
 .slot.just svg.stamp { animation: land .55s cubic-bezier(.2, 1.6, .4, 1) both; }
 @keyframes land { 0% { transform: scale(2.4) rotate(var(--r)); opacity: 0; } 60% { opacity: 1; } 100% { transform: scale(1) rotate(var(--r)); opacity: 1; } }
@@ -557,6 +557,8 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       if (!has) {
         s.setAttribute('aria-label', `在第 ${i + 1} 格蓋印章`);
         s.addEventListener('click', () => addStamp(i));
+      } else {
+        s.addEventListener('click', () => tapStamp(i));
       }
       grid.appendChild(s);
     }
@@ -583,7 +585,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     } else {
       btn.className = 'stamp-btn';
       btn.innerHTML = btnStamp + '<span>蓋好棒棒印章</span>';
-      $('hint').textContent = '點空格裡的數字，就能在那一格蓋印章';
+      $('hint').textContent = '點空格裡的數字蓋印章；雙擊已蓋的印章可以移除';
     }
   }
 
@@ -692,6 +694,20 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   $('multiCancel').addEventListener('click', () => { $('multi').hidden = true; });
   $('stampBtn').addEventListener('click', openMulti);
   $('cheer').addEventListener('click', () => {}); // swallow taps while the animation plays
+
+  // double-tap an stamped cell to take its stamp off
+  let lastTap = { i: -1, t: 0 };
+  function tapStamp(i) {
+    const now = Date.now();
+    if (lastTap.i === i && now - lastTap.t < 400) {
+      lastTap = { i: -1, t: 0 };
+      if (cheering || !state.stamps[i]) return;
+      state.stamps[i] = null;
+      save(); render();
+      return;
+    }
+    lastTap = { i, t: now };
+  }
 
   /* ---------- full card: spin now or save it ---------- */
   function openChoice() {
