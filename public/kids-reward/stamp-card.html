@@ -222,13 +222,26 @@ button.slot .n { opacity: 1; font-size: .95rem; }
 .prow .pstate { flex: 0 0 100%; font-size: .8rem; color: var(--muted); padding-left: 2.4em; }
 .prow .pstate.on { color: var(--leaf); }
 .prow.off { opacity: .6; }
+.prow.fresh { animation: freshRow 1.6s ease-out; }
+@keyframes freshRow { from { background: var(--ink-soft); } to { background: transparent; } }
+.sw { position: relative; width: 44px; height: 26px; flex: none; }
+.sw input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.sw input:disabled { cursor: default; }
+.sw .swknob { position: absolute; inset: 0; border-radius: 13px; background: var(--line); transition: background .2s; pointer-events: none; }
+.sw .swknob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .2s; }
+.sw input:checked + .swknob { background: var(--leaf); }
+.sw input:checked + .swknob::after { transform: translateX(18px); }
+.sw input:disabled + .swknob { opacity: .4; }
+.sw input:focus-visible + .swknob { outline: 3px solid var(--sky); outline-offset: 2px; }
+.undo { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--ink-soft); border: 1px solid var(--ink); border-radius: 12px; padding: 8px 12px; font-size: .9rem; }
+.note.sum { color: var(--fg); font-weight: 600; }
 .prow.off .plabel { color: var(--muted); }
 .mixbar { display: flex; height: 34px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--paper); }
 .mseg { flex: none; display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden; white-space: nowrap; font-size: .75rem; border-right: 2px solid var(--card); }
 .mseg.gap { background: repeating-linear-gradient(45deg, transparent 0 6px, var(--line) 6px 8px); color: var(--muted); border-right: none; }
 .prow input { font: inherit; color: var(--fg); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; box-sizing: border-box; }
 .prow .pname { flex: 1 1 auto; width: 100%; }
-.prow .pp { width: 76px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.prow .pp { width: 72px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
 .prow .pct { color: var(--muted); }
 .prow .pdel { font: inherit; border: none; background: none; color: var(--muted); font-size: 1.1rem; padding: 6px; cursor: pointer; }
 .prow .pdel:disabled { opacity: .25; cursor: default; }
@@ -915,35 +928,73 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       .slice(0, Math.max(0, left)).forEach(o => { out[o.k]++; });
     others.forEach((j, k) => { list[j].p = out[k]; });
   }
+  // deleted prizes can be put back for a few seconds
+  const undoTimers = [];
+  function hideUndo(t) { clearTimeout(undoTimers[t]); $('undo' + t).hidden = true; }
+  function showUndo(t, index, removed) {
+    const bar = $('undo' + t);
+    bar.innerHTML = `<span>已刪除「${removed.n || '（未命名）'}」</span><button class="btn" type="button">復原</button>`;
+    bar.hidden = false;
+    bar.querySelector('button').addEventListener('click', () => {
+      const list = state.tiers[t];
+      list.splice(index, 0, removed);
+      if (removed.p > 0) spread(list, index);   // gives its chance back, the others make room
+      state.customTiers[t] = true;
+      renderRows(t);
+    });
+    clearTimeout(undoTimers[t]);
+    undoTimers[t] = setTimeout(() => { bar.hidden = true; }, 6000);
+  }
   function renderRows(t) {
     const list = state.tiers[t], box = $('rows' + t);
     box.innerHTML = '';
     list.forEach((item, i) => {
       const row = document.createElement('div');
       row.className = 'prow';
-      row.innerHTML = '<span class="plabel"></span><input class="pname" type="text" maxlength="20" placeholder="獎品名稱"><input class="pp" type="number" min="0" max="100" step="0.1" aria-label="機率（%）"><span class="pct">%</span><button class="pdel" aria-label="刪除這個獎品">✕</button><span class="pstate"></span>';
-      const name = row.querySelector('.pname'), pp = row.querySelector('.pp'), del = row.querySelector('.pdel');
+      row.innerHTML = '<span class="plabel"></span><input class="pname" type="text" maxlength="20" placeholder="獎品名稱"><input class="pp" type="number" inputmode="decimal" min="0" max="100" step="0.1" aria-label="機率（%）"><span class="pct">%</span><label class="sw" title="上轉盤"><input class="swin" type="checkbox" aria-label="上轉盤"><span class="swknob"></span></label><button class="pdel" aria-label="刪除這個獎品">✕</button><span class="pstate"></span>';
+      const name = row.querySelector('.pname'), pp = row.querySelector('.pp'), sw = row.querySelector('.swin'), del = row.querySelector('.pdel');
       name.value = item.n;
       name.addEventListener('input', () => {
+        const wasNamed = item.n.trim() !== '';
         item.n = name.value.slice(0, 20);
         if (!item.n.trim()) {
           // no name: it leaves the wheel and its chance goes back to the others
           if (item.p) { item.p = 0; spread(list, -1); }
-        } else if (item.p === 0) {
+        } else if (!wasNamed && item.p === 0) {
           // a newly named prize takes an equal share from the prizes on the wheel
           item.p = Math.floor(1000 / (list.filter((x, j) => j !== i && isOn(x)).length + 1));
           spread(list, i);
         }
         state.customTiers[t] = true; paintRows(t);
       });
+      name.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (pp.disabled) name.blur(); else pp.focus();
+      });
+      pp.addEventListener('focus', () => pp.select());
       pp.addEventListener('input', () => {
         const v = parseFloat(pp.value);
         item.p = Number.isFinite(v) ? Math.max(0, Math.min(1000, Math.round(v * 10))) : 0;
         spread(list, i);
         state.customTiers[t] = true; paintRows(t);
       });
+      sw.addEventListener('change', () => {
+        if (sw.checked) {
+          item.p = Math.floor(1000 / (list.filter((x, j) => j !== i && isOn(x)).length + 1));
+          spread(list, i);
+        } else {
+          item.p = 0; spread(list, -1);
+        }
+        state.customTiers[t] = true; paintRows(t);
+      });
       del.disabled = list.length <= MIN_PRIZES;
-      del.addEventListener('click', () => { list.splice(i, 1); spread(list, -1); state.customTiers[t] = true; renderRows(t); });
+      del.addEventListener('click', () => {
+        const removed = list.splice(i, 1)[0];
+        spread(list, -1); state.customTiers[t] = true;
+        renderRows(t);
+        showUndo(t, i, removed);
+      });
       box.appendChild(row);
     });
     paintRows(t);
@@ -958,11 +1009,14 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       const pp = row.querySelector('.pp');
       pp.disabled = !named;
       if (pp !== document.activeElement) pp.value = (item.p / 10).toFixed(1);
+      const sw = row.querySelector('.swin');
+      sw.checked = on; sw.disabled = !named;
       const st = row.querySelector('.pstate');
       st.className = 'pstate ' + (on ? 'on' : 'off');
-      st.textContent = on ? '● 上轉盤' : !named ? '○ 還沒有名字，不上轉盤' : '○ 機率是 0%，不上轉盤';
+      st.textContent = on ? '● 上轉盤' : !named ? '○ 還沒有名字，不上轉盤' : '○ 已關閉，不上轉盤';
     });
     $('add' + t).disabled = list.length >= MAX_PRIZES;
+    hideUndo(t);
     updateTotal(t);
   }
   // what would stop 儲存 from working: a tier in use needs at least MIN_PRIZES prizes on the wheel
@@ -978,13 +1032,15 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     const box = document.createElement('div');
     box.className = 'tier';
     box.id = 'tierBox' + t;
-    box.innerHTML = `<label id="tierLabel${t}">${tierName(t)}</label><div class="mixbar" id="mix${t}"></div><div class="prows" id="rows${t}"></div><div class="row"><button class="btn" id="add${t}">＋ 新增獎品</button></div><div class="note" id="total${t}"></div><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
+    box.innerHTML = `<label id="tierLabel${t}">${tierName(t)}</label><div class="mixbar" id="mix${t}"></div><div class="note sum" id="total${t}"></div><div class="undo" id="undo${t}" hidden></div><div class="prows" id="rows${t}"></div><div class="row"><button class="btn" id="add${t}">＋ 新增獎品</button></div><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
     tierBox.appendChild(box);
     $('add' + t).addEventListener('click', () => {
       if (state.tiers[t].length >= MAX_PRIZES) return;
       state.tiers[t].push({ n: '', p: 0 }); state.customTiers[t] = true;
       renderRows(t);
-      $('rows' + t).lastElementChild.querySelector('.pname').focus();
+      const row = $('rows' + t).lastElementChild;
+      row.classList.add('fresh');
+      row.querySelector('.pname').focus();
     });
     $('tierPreview' + t).addEventListener('click', () => {
       if (state.tiers[t].filter(isOn).length < MIN_PRIZES) { $('tierNote' + t).textContent = `至少要有 ${MIN_PRIZES} 個上轉盤的獎品（有名字、機率大於 0），才能轉。`; return; }
