@@ -223,12 +223,19 @@ button.slot .n { opacity: 1; font-size: .95rem; }
 .multi-grid button small { display: block; font-family: var(--font-body); font-size: .75rem; }
 .field select { font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%; }
 .prows { display: flex; flex-direction: column; gap: 8px; }
-.prow { display: flex; align-items: center; gap: 6px; }
+.prow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.prow .plabel { font-family: var(--font-display); font-size: 1.1rem; color: var(--ink); width: 1.4em; text-align: center; flex: none; }
+.prow .pstate { flex: 0 0 100%; font-size: .8rem; color: var(--muted); padding-left: 2.4em; }
+.prow .pstate.on { color: var(--leaf); }
+.prow.off { opacity: .6; }
+.prow.off .plabel { color: var(--muted); }
+.mixbar { display: flex; height: 34px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--paper); }
+.mseg { flex: none; display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden; white-space: nowrap; font-size: .75rem; border-right: 2px solid var(--card); }
+.mseg.gap { background: repeating-linear-gradient(45deg, transparent 0 6px, var(--line) 6px 8px); color: var(--muted); border-right: none; }
 .prow input { font: inherit; color: var(--fg); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; box-sizing: border-box; }
 .prow .pname { flex: 1 1 auto; width: 100%; }
 .prow .pp { width: 76px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
 .prow .pct { color: var(--muted); }
-.prow .plabel { font-family: var(--font-display); font-size: 1.1rem; color: var(--ink); width: 1.6em; text-align: center; flex: none; }
 .prow .pdel { font: inherit; border: none; background: none; color: var(--muted); font-size: 1.1rem; padding: 6px; cursor: pointer; }
 .prow .pdel:disabled { opacity: .25; cursor: default; }
 .note.err { color: var(--ink); }
@@ -369,6 +376,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   <div class="choice-card" role="dialog" aria-labelledby="askTitle">
     <h2 id="askTitle">要儲存這次的修改嗎？</h2>
     <p>儲存後，修改會套用到之後的集點卡和轉盤。不儲存的話，會回到原本的設定。</p>
+    <p class="note err" id="askNote" hidden></p>
     <button class="big-choice spin" id="askSave"><b>儲存修改</b></button>
     <button class="big-choice keep" id="askDiscard"><b>不儲存，回到原本設定</b></button>
     <button class="link-btn" id="askStay">繼續編輯</button>
@@ -433,7 +441,11 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   const filled = () => state.stamps.filter(Boolean).length;
   const isFull = () => filled() >= GOAL;
   const tierFor = cards => Math.max(1, Math.min(cards, state.maxCards)) - 1;
-  const prizesFor = cards => { const t = (state.tiers[tierFor(cards)] || []).filter(x => x.n.trim()); return t.length >= MIN_PRIZES ? t : exampleFor(tierFor(cards)); };
+  const prizesFor = cards => {
+    const on = (state.tiers[tierFor(cards)] || []).map((x, i) => ({ ...x, i })).filter(isOn);
+    return on.length >= MIN_PRIZES ? on : exampleFor(tierFor(cards)).map((x, i) => ({ ...x, i }));
+  };
+  const isOn = x => x.n.trim() !== '' && x.p > 0;
   const kidPrefix = () => state.name.trim() ? state.name.trim() + '，' : '';
 
   /* ---------- storage: artifact db when available, phone storage otherwise ---------- */
@@ -711,7 +723,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     const size = wc.clientWidth || 320, dpr = devicePixelRatio || 1;
     if (wc.width !== Math.round(size * dpr)) { wc.width = Math.round(size * dpr); wc.height = Math.round(size * dpr); }
     wx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const list = prizesFor(wheelCards).map(x => x.n), n = list.length, seg = Math.PI * 2 / n, R = size / 2, c = R;
+    const items = prizesFor(wheelCards), list = items.map(x => x.n), n = list.length, seg = Math.PI * 2 / n, R = size / 2, c = R;
     wx.clearRect(0, 0, size, size);
     wx.beginPath(); wx.arc(c, c, R - 2, 0, Math.PI * 2); wx.fillStyle = css('--card'); wx.fill();
     for (let i = 0; i < n; i++) {
@@ -730,7 +742,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       wx.save(); wx.translate(bx, 0); wx.rotate(-(a0 + seg / 2)); // keep digits upright so 6 never reads as 9
       wx.textAlign = 'center'; wx.fillStyle = isSun ? '#3a2a00' : col;
       wx.font = `bold ${Math.round(br * 1.25)}px Huninn, "PingFang TC", "Noto Sans TC", sans-serif`;
-      wx.fillText(letter(i), 0, 1);
+      wx.fillText(letter(items[i].i), 0, 1);
       wx.restore();
       wx.fillStyle = isSun ? '#3a2a00' : '#fff';
       // the name sits between the center button (22% of the wheel) and the number badge
@@ -829,7 +841,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       const cur = Math.floor(((-Math.PI / 2 - rot) / seg % n + n) % n);
       if (cur !== lastSeg) { tick(); lastSeg = cur; }
       drawWheel();
-      if (t < 1) requestAnimationFrame(frame); else finish(`${letter(k)}　${list[k].n}`);
+      if (t < 1) requestAnimationFrame(frame); else finish(`${letter(list[k].i)}　${list[k].n}`);
     }
     requestAnimationFrame(frame);
   }
@@ -863,19 +875,46 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   }
   const tierBox = $('tiers');
   function updateTotal(t) {
-    const sum = state.tiers[t].reduce((a, x) => a + (x.n.trim() ? x.p : 0), 0);
-    const el = $('total' + t);
-    el.textContent = `機率合計：${(sum / 10).toFixed(1)}%` + (sum === 1000 ? '（剛好 100%）' : '　還沒到 100%，轉盤會依比例換算，建議調整到 100%');
-    el.classList.toggle('err', sum !== 1000);
+    const on = state.tiers[t].filter(isOn), sum = on.reduce((a, x) => a + x.p, 0);
+    const enough = on.length >= MIN_PRIZES;
+    $('total' + t).textContent = `上轉盤 ${on.length} 個（至少 ${MIN_PRIZES} 個）｜機率合計 ${(sum / 10).toFixed(1)}%`
+      + (!enough ? `，還差 ${MIN_PRIZES - on.length} 個才能轉` : sum !== 1000 ? '（合計不是 100%，轉盤會依比例換算）' : '');
+    $('total' + t).classList.toggle('err', !enough || sum !== 1000);
+    paintMix(t);
   }
-  // Keep the chance at `fixed` as it is and share the rest (1000 tenths = 100%) across the other prizes,
+  // colour bar of the wheel: one segment per prize on the wheel, same colours and letters as the wheel
+  function paintMix(t) {
+    const bar = $('mix' + t), on = state.tiers[t].map((x, i) => ({ x, i })).filter(o => isOn(o.x));
+    const sum = on.reduce((a, o) => a + o.x.p, 0), scale = Math.max(1000, sum);
+    bar.innerHTML = '';
+    on.forEach((o, k) => {
+      const seg = document.createElement('div');
+      const isSun = SEG_COLORS[k % SEG_COLORS.length] === '--sun';
+      seg.className = 'mseg';
+      seg.style.width = (o.x.p / scale * 100) + '%';
+      seg.style.background = `var(${SEG_COLORS[k % SEG_COLORS.length]})`;
+      seg.style.color = isSun ? '#3a2a00' : '#fff';
+      seg.textContent = o.x.p / scale >= .08 ? `${letter(o.i)} ${(o.x.p / 10).toFixed(1)}%` : letter(o.i);
+      seg.title = `${letter(o.i)}：${o.x.n}　${(o.x.p / 10).toFixed(1)}%`;
+      bar.appendChild(seg);
+    });
+    if (sum < 1000) {
+      const gap = document.createElement('div');
+      gap.className = 'mseg gap';
+      gap.style.width = ((1000 - sum) / scale * 100) + '%';
+      gap.textContent = `缺 ${((1000 - sum) / 10).toFixed(1)}%`;
+      bar.appendChild(gap);
+    }
+    if (!on.length) bar.textContent = '還沒有上轉盤的獎品';
+  }
+  // Keep the chance at `fixed` as it is and share the rest (1000 = 100%) across the other prizes on the wheel,
   // in proportion to their current chances. fixed = -1 shares the whole 100%. Rounded so the total is exact.
   function spread(list, fixed) {
-    const others = list.map((_, j) => j).filter(j => j !== fixed);
-    if (!others.length) return;
     const target = 1000 - (fixed >= 0 ? list[fixed].p : 0);
+    const others = list.map((_, j) => j).filter(j => j !== fixed && list[j].p > 0);
+    if (!others.length) return;
     const oldSum = others.reduce((a, j) => a + list[j].p, 0);
-    const raw = others.map(j => oldSum > 0 ? list[j].p * target / oldSum : target / others.length);
+    const raw = others.map(j => list[j].p * target / oldSum);
     const out = raw.map(Math.floor);
     const left = target - out.reduce((a, b) => a + b, 0);
     raw.map((r, k) => ({ k, f: r - Math.floor(r) })).sort((a, b) => b.f - a.f)
@@ -885,36 +924,67 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   function renderRows(t) {
     const list = state.tiers[t], box = $('rows' + t);
     box.innerHTML = '';
-    let named = -1;
     list.forEach((item, i) => {
       const row = document.createElement('div');
       row.className = 'prow';
-      row.innerHTML = '<span class="plabel"></span><input class="pname" type="text" maxlength="20" placeholder="獎品名稱"><input class="pp" type="number" min="0" max="100" step="0.1" aria-label="機率（%）"><span class="pct">%</span><button class="pdel" aria-label="刪除這個獎品">✕</button>';
+      row.innerHTML = '<span class="plabel"></span><input class="pname" type="text" maxlength="20" placeholder="獎品名稱"><input class="pp" type="number" min="0" max="100" step="0.1" aria-label="機率（%）"><span class="pct">%</span><button class="pdel" aria-label="刪除這個獎品">✕</button><span class="pstate"></span>';
       const name = row.querySelector('.pname'), pp = row.querySelector('.pp'), del = row.querySelector('.pdel');
       name.value = item.n;
-      row.querySelector('.plabel').textContent = item.n.trim() ? letter(++named) : '–';
-      pp.value = (item.p / 10).toFixed(1);
-      name.addEventListener('input', () => { item.n = name.value.slice(0, 20); state.customTiers[t] = true; updateTotal(t); });
+      name.addEventListener('input', () => {
+        item.n = name.value.slice(0, 20);
+        if (!item.n.trim()) {
+          // no name: it leaves the wheel and its chance goes back to the others
+          if (item.p) { item.p = 0; spread(list, -1); }
+        } else if (item.p === 0) {
+          // a newly named prize takes an equal share from the prizes on the wheel
+          item.p = Math.floor(1000 / (list.filter((x, j) => j !== i && isOn(x)).length + 1));
+          spread(list, i);
+        }
+        state.customTiers[t] = true; paintRows(t);
+      });
       pp.addEventListener('input', () => {
         const v = parseFloat(pp.value);
         item.p = Number.isFinite(v) ? Math.max(0, Math.min(1000, Math.round(v * 10))) : 0;
         spread(list, i);
-        // show the new chances on the other rows without redrawing (keeps focus while typing)
-        $('rows' + t).querySelectorAll('.pp').forEach((el, j) => { if (j !== i) el.value = (list[j].p / 10).toFixed(1); });
-        state.customTiers[t] = true; updateTotal(t);
+        state.customTiers[t] = true; paintRows(t);
       });
       del.disabled = list.length <= MIN_PRIZES;
       del.addEventListener('click', () => { list.splice(i, 1); spread(list, -1); state.customTiers[t] = true; renderRows(t); });
       box.appendChild(row);
     });
+    paintRows(t);
+  }
+  // refresh letters, status and chances of every row without rebuilding the inputs (keeps typing focus)
+  function paintRows(t) {
+    const list = state.tiers[t], rows = $('rows' + t).children;
+    list.forEach((item, i) => {
+      const row = rows[i], on = isOn(item), named = item.n.trim() !== '';
+      row.classList.toggle('off', !on);
+      row.querySelector('.plabel').textContent = letter(i);
+      const pp = row.querySelector('.pp');
+      pp.disabled = !named;
+      if (pp !== document.activeElement) pp.value = (item.p / 10).toFixed(1);
+      const st = row.querySelector('.pstate');
+      st.className = 'pstate ' + (on ? 'on' : 'off');
+      st.textContent = on ? '● 上轉盤' : !named ? '○ 還沒有名字，不上轉盤' : '○ 機率是 0%，不上轉盤';
+    });
     $('add' + t).disabled = list.length >= MAX_PRIZES;
     updateTotal(t);
+  }
+  // what would stop 儲存 from working: a tier in use needs at least MIN_PRIZES prizes on the wheel
+  function settingsProblems() {
+    const out = [];
+    for (let t = 0; t < state.maxCards; t++) {
+      const n = state.tiers[t].filter(isOn).length;
+      if (n < MIN_PRIZES) out.push(`${tierName(t)} 還差 ${MIN_PRIZES - n} 個上轉盤的獎品`);
+    }
+    return out;
   }
   Array.from({ length: MAX_TIERS }).forEach((_, t) => {
     const box = document.createElement('div');
     box.className = 'tier';
     box.id = 'tierBox' + t;
-    box.innerHTML = `<label id="tierLabel${t}">${tierName(t)}</label><div class="prows" id="rows${t}"></div><div class="row"><button class="btn" id="add${t}">＋ 新增獎品</button></div><div class="note" id="total${t}"></div><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
+    box.innerHTML = `<label id="tierLabel${t}">${tierName(t)}</label><div class="mixbar" id="mix${t}"></div><div class="prows" id="rows${t}"></div><div class="row"><button class="btn" id="add${t}">＋ 新增獎品</button></div><div class="note" id="total${t}"></div><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
     tierBox.appendChild(box);
     $('add' + t).addEventListener('click', () => {
       if (state.tiers[t].length >= MAX_PRIZES) return;
@@ -923,7 +993,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       $('rows' + t).lastElementChild.querySelector('.pname').focus();
     });
     $('tierPreview' + t).addEventListener('click', () => {
-      if (state.tiers[t].filter(x => x.n.trim()).length < MIN_PRIZES) { $('tierNote' + t).textContent = `至少要有 ${MIN_PRIZES} 個有名字的獎品，才能轉。`; return; }
+      if (state.tiers[t].filter(isOn).length < MIN_PRIZES) { $('tierNote' + t).textContent = `至少要有 ${MIN_PRIZES} 個上轉盤的獎品（有名字、機率大於 0），才能轉。`; return; }
       openWheel(t + 1);
     });
   });
@@ -980,7 +1050,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   }
   function closeSettingsSheet() {
     $('settingsSheet').hidden = true;
-    $('leaveAsk').hidden = true;
+    $('leaveAsk').hidden = true; $('askNote').hidden = true;
     if (history.state && history.state.settings) history.back();
     render();
   }
@@ -995,7 +1065,11 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     stayNeedsEntry = true;   // the back press already removed our history entry
     requestClose();
   });
-  $('askSave').addEventListener('click', () => { save(); baseline = settingsSnapshot(); closeSettingsSheet(); });
+  $('askSave').addEventListener('click', () => {
+    const problems = settingsProblems();
+    if (problems.length) { $('askNote').textContent = '還不能儲存：' + problems.join('；'); $('askNote').hidden = false; return; }
+    save(); baseline = settingsSnapshot(); closeSettingsSheet();
+  });
   $('askDiscard').addEventListener('click', () => { Object.assign(state, JSON.parse(baseline)); closeSettingsSheet(); });
   $('askStay').addEventListener('click', () => {
     $('leaveAsk').hidden = true;
