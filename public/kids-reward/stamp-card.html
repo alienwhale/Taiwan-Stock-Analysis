@@ -354,7 +354,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
 (() => {
   const GOAL = 30;
   const KEY = 'haobangbang-card-v1';
-  const MAX_TIERS = 5;
+  const MAX_TIERS = 20;
   const tierName = t => `${t + 1} 張卡（${(t + 1) * GOAL} 個印章）`;
   const EXAMPLE_TIERS = [
     ['冰淇淋一支', '多玩 30 分鐘', '挑一本新書', '小玩具一個', '決定晚餐吃什麼', '去公園野餐'],
@@ -363,11 +363,13 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     ['新的桌遊', '去水族館', '買一套新衣服', '烤肉派對', '大盒樂高', '去兒童樂園'],
     ['想要很久的大禮物', '出去玩兩天', '去主題樂園', '買一台新玩具車', '辦一場小派對', '全家吃大餐']
   ];
+  // tiers past the last example set reuse it, so every level has a starter prize list
+  const exampleFor = t => EXAMPLE_TIERS[Math.min(t, EXAMPLE_TIERS.length - 1)].slice();
   const CHEERS = ['好棒棒！', '太厲害了！', '你做到了！', '超讚的！', '真了不起！', '繼續加油！', '好乖喔！', '給你拍拍手！'];
   const SEG_COLORS = ['--ink', '--sun', '--sky', '--leaf', '--plum'];
 
   const emptyCard = () => Array(GOAL).fill(null);
-  let state = { name: '', stamps: emptyCard(), banked: 0, maxCards: 3, tiers: EXAMPLE_TIERS.map(t => t.slice()), customTiers: EXAMPLE_TIERS.map(() => false), history: [] };
+  let state = { name: '', stamps: emptyCard(), banked: 0, maxCards: 3, tiers: Array.from({ length: MAX_TIERS }, (_, t) => exampleFor(t)), customTiers: Array(MAX_TIERS).fill(false), history: [] };
   let docRef = null;
   let saving = Promise.resolve();
 
@@ -376,7 +378,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
   const filled = () => state.stamps.filter(Boolean).length;
   const isFull = () => filled() >= GOAL;
   const tierFor = cards => Math.max(1, Math.min(cards, state.maxCards)) - 1;
-  const prizesFor = cards => { const t = state.tiers[tierFor(cards)]; return t && t.length >= 2 ? t : EXAMPLE_TIERS[tierFor(cards)]; };
+  const prizesFor = cards => { const t = state.tiers[tierFor(cards)]; return t && t.length >= 2 ? t : exampleFor(tierFor(cards)); };
   const kidPrefix = () => state.name.trim() ? state.name.trim() + '，' : '';
 
   /* ---------- storage: artifact db when available, phone storage otherwise ---------- */
@@ -397,8 +399,8 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       stamps,
       banked: Number.isInteger(s.banked) && s.banked > 0 ? s.banked : 0,
       maxCards: Number.isInteger(s.maxCards) ? Math.max(1, Math.min(MAX_TIERS, s.maxCards)) : 3,
-      tiers: EXAMPLE_TIERS.map((ex, i) => Array.isArray(tiers[i]) && tiers[i].length >= 2 ? tiers[i] : ex.slice()),
-      customTiers: EXAMPLE_TIERS.map((_, i) => !!custom[i]),
+      tiers: Array.from({ length: MAX_TIERS }, (_, i) => Array.isArray(tiers[i]) && tiers[i].length >= 2 ? tiers[i] : exampleFor(i)),
+      customTiers: Array.from({ length: MAX_TIERS }, (_, i) => !!custom[i]),
       history: Array.isArray(s.history) ? s.history : []
     };
   }
@@ -797,7 +799,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     state.tiers[t] = list; state.customTiers[t] = true; save();
   }
   const tierBox = $('tiers');
-  EXAMPLE_TIERS.forEach((_, t) => {
+  Array.from({ length: MAX_TIERS }).forEach((_, t) => {
     const box = document.createElement('div');
     box.className = 'tier';
     box.id = 'tierBox' + t;
