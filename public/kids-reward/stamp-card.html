@@ -1,0 +1,1166 @@
+<title>好棒棒集點卡</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#e9f3f5">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&display=swap">
+<style>
+/* Layout: one phone-sized column — header, 30-slot stamp card on grid paper, a big stamp button; wheel and settings open as full-screen sheets. */
+:root {
+  --paper: #e9f3f5;
+  --grid: rgba(74, 140, 170, .13);
+  --card: #ffffff;
+  --fg: #1d3340;
+  --muted: #5d7784;
+  --line: #cfe0e6;
+  --ink: #d8323e;
+  --ink-soft: rgba(216, 50, 62, .12);
+  --sun: #ffc23a;
+  --leaf: #2fae74;
+  --sky: #3f9bd8;
+  --plum: #8a63d2;
+  --shade: rgba(16, 32, 40, .55);
+  --font-display: "Huninn", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --font-body: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12212a; --grid: rgba(120, 180, 205, .08); --card: #1a2e39; --fg: #e6f0f3;
+    --muted: #92abb6; --line: #2b4553; --ink: #ff5d66; --ink-soft: rgba(255, 93, 102, .16);
+    --sun: #ffc94f; --leaf: #46c48a; --sky: #5cb0ea; --plum: #a283e6; --shade: rgba(0, 0, 0, .65);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12212a; --grid: rgba(120, 180, 205, .08); --card: #1a2e39; --fg: #e6f0f3;
+  --muted: #92abb6; --line: #2b4553; --ink: #ff5d66; --ink-soft: rgba(255, 93, 102, .16);
+  --sun: #ffc94f; --leaf: #46c48a; --sky: #5cb0ea; --plum: #a283e6; --shade: rgba(0, 0, 0, .65);
+  color-scheme: dark;
+}
+html, body { min-height: 100%; }
+body {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+.app {
+  max-width: 520px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 32px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+h1 { font-family: var(--font-display); font-size: 1.65rem; margin: 0; text-wrap: balance; font-weight: 400; }
+.sub { color: var(--muted); font-size: .9rem; margin-top: 2px; }
+.icon-btn {
+  border: 1px solid var(--line); background: var(--card); color: var(--fg);
+  width: 44px; height: 44px; border-radius: 50%; font-size: 1.2rem; cursor: pointer; flex: none;
+  display: grid; place-items: center;
+}
+.icon-btn svg { width: 22px; height: 22px; }
+
+.progress { display: flex; align-items: center; gap: 12px; }
+.bar { flex: 1; height: 14px; border-radius: 7px; background: var(--card); border: 1px solid var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sun), var(--ink)); border-radius: 7px; transition: width .6s cubic-bezier(.3, 1.4, .5, 1); }
+.count { font-family: var(--font-display); font-size: 1.35rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.count small { color: var(--muted); font-size: .9rem; }
+
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  padding: 16px 14px; box-shadow: 0 6px 0 var(--line);
+}
+.grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.slot {
+  aspect-ratio: 1; max-width: 100%; border-radius: 50%;
+  border: 2px dashed var(--line); position: relative; display: grid; place-items: center;
+}
+.slot .n { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; opacity: .7; }
+.slot.prize-slot { border-color: var(--sun); }
+.slot.prize-slot .n { color: var(--fg); opacity: 1; }
+.slot svg.stamp { position: absolute; inset: -6%; width: 112%; height: 112%; }
+.slot.filled { border-color: transparent; cursor: pointer; }
+.slot.filled .n { display: none; }
+.slot.just svg.stamp { animation: land .55s cubic-bezier(.2, 1.6, .4, 1) both; }
+@keyframes land { 0% { transform: scale(2.4) rotate(var(--r)); opacity: 0; } 60% { opacity: 1; } 100% { transform: scale(1) rotate(var(--r)); opacity: 1; } }
+
+.stamp-btn {
+  font-family: var(--font-display); font-size: 1.5rem; color: #fff;
+  background: var(--ink); border: none; border-radius: 22px; padding: 18px 20px;
+  box-shadow: 0 7px 0 color-mix(in srgb, var(--ink) 60%, #000); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%;
+  transition: transform .08s, box-shadow .08s;
+}
+.stamp-btn:active { transform: translateY(5px); box-shadow: 0 2px 0 color-mix(in srgb, var(--ink) 60%, #000); }
+.stamp-btn svg { width: 40px; height: 40px; flex: none; }
+.stamp-btn.spin-ready { background: var(--sun); color: #3a2a00; box-shadow: 0 7px 0 color-mix(in srgb, var(--sun) 60%, #000); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.03); } }
+.hint { text-align: center; color: var(--muted); font-size: .85rem; margin: -6px 0 0; }
+.sync { text-align: center; color: var(--muted); font-size: .75rem; }
+
+:focus-visible { outline: 3px solid var(--sky); outline-offset: 3px; }
+
+/* Celebration overlay */
+.overlay {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+  background: var(--shade);
+  padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(16px, env(safe-area-inset-left, 0px));
+}
+.cheer { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; pointer-events: none; }
+.cheer .big { width: min(62vw, 260px); height: min(62vw, 260px); animation: bigstamp .7s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes bigstamp {
+  0% { transform: translateY(-40vh) scale(1.6) rotate(-20deg); opacity: 0; }
+  55% { transform: translateY(0) scale(.92) rotate(-8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-8deg); opacity: 1; }
+}
+.cheer .msg {
+  font-family: var(--font-display); font-size: 2.1rem; color: #fff;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, .35); animation: pop .5s .35s cubic-bezier(.2, 1.6, .4, 1) both;
+}
+.cheer .msg2 { color: #fff; font-size: 1.05rem; opacity: .95; animation: pop .5s .5s both; }
+@keyframes pop { 0% { transform: scale(.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
+
+/* Sheets */
+.sheet {
+  position: fixed; inset: 0; z-index: 50; background: var(--paper); overflow-y: auto;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.sheet-inner {
+  max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 32px;
+}
+.wheel-sheet .sheet-inner { align-items: center; text-align: center; min-height: 100%; justify-content: center; }
+.wheel-title { font-family: var(--font-display); font-size: 1.9rem; margin: 0; font-weight: 400; text-wrap: balance; }
+.wheel-wrap { position: relative; width: min(88vw, 420px); max-width: 100%; aspect-ratio: 1; }
+.wheel-wrap canvas { width: 100%; height: 100%; display: block; }
+.pointer {
+  position: absolute; left: 50%; top: -10px; transform: translateX(-50%); width: 38px; height: 50px; z-index: 2;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, .3));
+}
+.hub {
+  position: absolute; left: 50%; top: 50%; width: 22%; aspect-ratio: 1; transform: translate(-50%, -50%);
+  border-radius: 50%; background: var(--card); border: 5px solid var(--ink); display: grid; place-items: center;
+  font-family: var(--font-display); font-size: clamp(.9rem, 4vw, 1.2rem); color: var(--ink);
+}
+.result {
+  background: var(--card); border: 2px solid var(--sun); border-radius: 18px; padding: 16px; width: 100%;
+  display: flex; flex-direction: column; gap: 8px; animation: pop .5s cubic-bezier(.2, 1.6, .4, 1) both;
+}
+.result .label { color: var(--muted); }
+.result .prize { font-family: var(--font-display); font-size: 2rem; color: var(--ink); overflow-wrap: anywhere; }
+
+.btn {
+  font: inherit; border-radius: 14px; padding: 12px 16px; cursor: pointer; border: 1px solid var(--line);
+  background: var(--card); color: var(--fg);
+}
+.btn.primary { background: var(--sky); border-color: transparent; color: #fff; font-family: var(--font-display); font-size: 1.15rem; }
+.btn.danger { color: var(--ink); border-color: var(--ink); background: transparent; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.settings h2 { font-family: var(--font-display); font-weight: 400; font-size: 1.5rem; margin: 0; }
+.settings h3 { font-size: .8rem; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field input, .field textarea {
+  font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%; box-sizing: border-box;
+}
+.field textarea { min-height: 170px; line-height: 1.6; resize: vertical; }
+.field .note { color: var(--muted); font-size: .82rem; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > .btn { flex: 1 1 140px; }
+.history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.history li { display: flex; justify-content: space-between; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.history li span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.history .d { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .9rem; }
+.empty { color: var(--muted); font-size: .9rem; }
+.confirm { background: var(--ink-soft); border: 1px solid var(--ink); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.sheet.wheel-sheet { z-index: 55; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
+/* Tappable empty slots */
+button.slot { font: inherit; background: transparent; padding: 0; cursor: pointer; color: inherit; }
+button.slot:active { background: var(--ink-soft); transform: scale(.94); }
+button.slot .n { opacity: 1; font-size: .95rem; }
+
+/* Saved cards strip */
+.bank { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--card); border: 2px solid var(--sun); border-radius: 16px; padding: 10px 12px; }
+.bank .cards { display: flex; flex: none; }
+.bank .mini { width: 22px; height: 28px; border-radius: 5px; background: var(--sun); border: 2px solid var(--card); margin-left: -8px; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); }
+.bank .mini:first-child { margin-left: 0; }
+.bank .txt { flex: 1 1 140px; min-width: 0; }
+.bank .txt b { font-family: var(--font-display); font-weight: 400; font-size: 1.1rem; }
+.bank .txt div { color: var(--muted); font-size: .85rem; }
+.bank .btn { flex: none; }
+
+/* Full-card choice */
+.choice-card { background: var(--card); border-radius: 22px; padding: 22px 18px; width: min(100%, 380px); box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; text-align: center; }
+.choice-card h2 { font-family: var(--font-display); font-weight: 400; font-size: 1.7rem; margin: 0; }
+.choice-card p { margin: 0; color: var(--muted); }
+.big-choice { font: inherit; border-radius: 16px; padding: 14px 16px; cursor: pointer; border: 2px solid transparent; display: flex; flex-direction: column; gap: 2px; text-align: center; }
+.big-choice b { font-family: var(--font-display); font-weight: 400; font-size: 1.3rem; }
+.big-choice span { font-size: .88rem; opacity: .85; }
+.big-choice.spin { background: var(--sun); color: #3a2a00; }
+.big-choice.keep { background: var(--card); color: var(--fg); border-color: var(--sky); }
+.link-btn { font: inherit; background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; text-decoration: underline; }
+
+.multi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.multi-grid button { font-family: var(--font-display); font-size: 1.6rem; font-variant-numeric: tabular-nums; padding: 14px 0; border-radius: 16px; border: 2px solid var(--ink); background: var(--ink-soft); color: var(--ink); cursor: pointer; }
+.multi-grid button:disabled { opacity: .3; cursor: default; }
+.multi-grid button small { display: block; font-family: var(--font-body); font-size: .75rem; }
+.field select { font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%; }
+.prows { display: flex; flex-direction: column; gap: 8px; }
+.prow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.prow .plabel { font-family: var(--font-display); font-size: 1.1rem; color: var(--ink); width: 1.4em; text-align: center; flex: none; }
+.prow .pstate { flex: 0 0 100%; font-size: .8rem; color: var(--muted); padding-left: 2.4em; }
+.prow .pstate.on { color: var(--leaf); }
+.prow.off { opacity: .6; }
+.prow.fresh { animation: freshRow 1.6s ease-out; }
+@keyframes freshRow { from { background: var(--ink-soft); } to { background: transparent; } }
+.sw { position: relative; width: 44px; height: 26px; flex: none; }
+.sw input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.sw input:disabled { cursor: default; }
+.sw .swknob { position: absolute; inset: 0; border-radius: 13px; background: var(--line); transition: background .2s; pointer-events: none; }
+.sw .swknob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .2s; }
+.sw input:checked + .swknob { background: var(--leaf); }
+.sw input:checked + .swknob::after { transform: translateX(18px); }
+.sw input:disabled + .swknob { opacity: .4; }
+.sw input:focus-visible + .swknob { outline: 3px solid var(--sky); outline-offset: 2px; }
+.undo { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--ink-soft); border: 1px solid var(--ink); border-radius: 12px; padding: 8px 12px; font-size: .9rem; }
+.note.sum { color: var(--fg); font-weight: 600; }
+.prow.off .plabel { color: var(--muted); }
+.mixbar { display: flex; height: 34px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--paper); }
+.mseg { flex: none; display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden; white-space: nowrap; font-size: .75rem; border-right: 2px solid var(--card); }
+.mseg.gap { background: repeating-linear-gradient(45deg, transparent 0 6px, var(--line) 6px 8px); color: var(--muted); border-right: none; }
+.prow input { font: inherit; color: var(--fg); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; box-sizing: border-box; }
+.prow .pname { flex: 1 1 auto; width: 100%; }
+.prow .pp { width: 72px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.prow .pct { color: var(--muted); }
+.prow .pdel { font: inherit; border: none; background: none; color: var(--muted); font-size: 1.1rem; padding: 6px; cursor: pointer; }
+.prow .pdel:disabled { opacity: .25; cursor: default; }
+.note.err { color: var(--ink); }
+.tier { display: flex; flex-direction: column; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+.tier label { font-family: var(--font-display); font-size: 1.1rem; }
+.tier textarea { min-height: 150px; background: var(--paper); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+</style>
+
+<div class="app">
+  <header>
+    <div>
+      <h1 id="title">好棒棒集點卡</h1>
+      <div class="sub" id="subtitle">集滿 30 個印章就能轉獎品輪盤</div>
+    </div>
+    <button class="icon-btn" id="openSettings" aria-label="設定">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <div class="progress">
+    <div class="bar" aria-hidden="true"><i id="barFill"></i></div>
+    <div class="count"><span id="countNum">0</span> <small>/ 30</small></div>
+  </div>
+
+  <div class="bank" id="bank" hidden>
+    <div class="cards" id="bankCards"></div>
+    <div class="txt"><b id="bankTitle"></b><div id="bankSub"></div></div>
+    <button class="btn" id="bankSpin">現在轉</button>
+  </div>
+
+  <div class="card"><div class="grid" id="grid"></div></div>
+
+  <button class="stamp-btn" id="stampBtn"></button>
+  <p class="hint" id="hint">點空格裡的數字，就能在那一格蓋印章</p>
+  <div class="sync" id="sync"></div>
+</div>
+
+<div class="overlay" id="cheer" hidden>
+  <div class="cheer">
+    <div id="cheerStamp"></div>
+    <div class="msg" id="cheerMsg"></div>
+    <div class="msg2" id="cheerMsg2"></div>
+  </div>
+</div>
+
+<div class="overlay" id="choice" hidden>
+  <div class="choice-card" role="dialog" aria-labelledby="choiceTitle">
+    <h2 id="choiceTitle">集滿 30 個了！</h2>
+    <p id="choiceText">要現在轉輪盤，還是存起來換更大的獎？</p>
+    <button class="big-choice spin" id="choiceSpin"><b>現在轉輪盤</b><span id="choiceSpinSub"></span></button>
+    <button class="big-choice keep" id="choiceKeep"><b>存起來，下次換更大的獎</b><span id="choiceKeepSub"></span></button>
+    <button class="link-btn" id="choiceLater">等一下再決定</button>
+  </div>
+</div>
+
+<div class="overlay" id="multi" hidden>
+  <div class="choice-card" role="dialog" aria-labelledby="multiTitle">
+    <h2 id="multiTitle">要蓋幾個印章？</h2>
+    <p id="multiText"></p>
+    <div class="multi-grid" id="multiGrid"></div>
+    <button class="link-btn" id="multiCancel">取消</button>
+  </div>
+</div>
+
+<div class="sheet wheel-sheet" id="wheelSheet" hidden>
+  <div class="sheet-inner">
+    <h2 class="wheel-title" id="wheelTitle">集滿 30 個了！轉轉看！</h2>
+    <div class="wheel-wrap">
+      <svg class="pointer" viewBox="0 0 38 50" aria-hidden="true"><path d="M19 50 L2 12 A18 18 0 1 1 36 12 Z" fill="var(--ink)"/><circle cx="19" cy="17" r="7" fill="#fff"/></svg>
+      <canvas id="wheel"></canvas>
+      <div class="hub">轉!</div>
+    </div>
+    <button class="stamp-btn spin-ready" id="spinBtn">轉輪盤</button>
+    <button class="link-btn" id="wheelBack">先不要轉，回去</button>
+    <div class="result" id="result" hidden>
+      <div class="label" id="resultLabel">恭喜你得到</div>
+      <div class="prize" id="resultPrize"></div>
+      <button class="btn primary" id="newCard">收下獎品</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet settings" id="settingsSheet" hidden>
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <h2>設定</h2>
+      <button class="btn" id="closeSettings">完成</button>
+    </div>
+
+    <div class="field">
+      <h3><label for="kidName">小朋友的名字</label></h3>
+      <input id="kidName" type="text" maxlength="12" placeholder="例如：小安">
+    </div>
+
+    <div class="field">
+      <h3><label for="maxCards">最多可以累積幾張卡</label></h3>
+      <select id="maxCards"></select>
+      <div class="note" id="maxCardsNote"></div>
+    </div>
+
+    <div class="field">
+      <h3>輪盤獎品與機率</h3>
+      <div class="note">存越多張再轉，用的是越大的獎品組。每組的選項依序標示 A、B、C…，預設 A 為 3%，其他選項平分剩下的 97%；每個選項的機率都可以自己改，合計要 100%。</div>
+      <div id="tiers"></div>
+    </div>
+
+    <div class="field">
+      <h3>印章和存起來的卡</h3>
+      <div class="row">
+        <button class="btn" id="undoBtn">收回最後一個印章</button>
+        <button class="btn danger" id="resetBtn">清空這張集點卡</button>
+      </div>
+      <div class="confirm" id="resetConfirm" hidden>
+        <div>確定要清空目前的 <b id="resetCount">0</b> 個印章嗎？</div>
+        <div class="row">
+          <button class="btn" id="resetNo">不要</button>
+          <button class="btn danger" id="resetYes">確定清空</button>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn" id="unbankBtn">收回一張存起來的卡</button>
+      </div>
+      <div class="note" id="bankNote"></div>
+    </div>
+
+    <div class="field">
+      <h3>得獎紀錄</h3>
+      <ul class="history" id="history"></ul>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="leaveAsk" hidden style="z-index: 70">
+  <div class="choice-card" role="dialog" aria-labelledby="askTitle">
+    <h2 id="askTitle">要儲存這次的修改嗎？</h2>
+    <p>儲存後，修改會套用到之後的集點卡和轉盤。不儲存的話，會回到原本的設定。</p>
+    <p class="note err" id="askNote" hidden></p>
+    <button class="big-choice spin" id="askSave"><b>儲存修改</b></button>
+    <button class="big-choice keep" id="askDiscard"><b>不儲存，回到原本設定</b></button>
+    <button class="link-btn" id="askStay">繼續編輯</button>
+  </div>
+</div>
+
+<canvas id="confetti"></canvas>
+
+<script>
+(() => {
+  const GOAL = 30;
+  const KEY = 'haobangbang-card-v1';
+  const MAX_TIERS = 20;
+  const tierName = t => `${t + 1} 張卡（${(t + 1) * GOAL} 個印章）`;
+  const MAX_PRIZES = 12, MIN_PRIZES = 3;
+  const letter = k => String.fromCharCode(65 + k); // 0 -> A
+  const EXAMPLE_TIERS = [
+    ['冰淇淋一支', '多玩 30 分鐘', '挑一本新書', '小玩具一個', '決定晚餐吃什麼', '去公園野餐'],
+    ['樂高一盒', '去遊樂園', '看一場電影', '多玩 1 小時', '買想要的繪本', '吃一次速食大餐'],
+    ['想要的大玩具', '去動物園', '全家出遊一天', '露營一晚', '自己挑一個大禮物', '吃大餐慶祝'],
+    ['新的桌遊', '去水族館', '買一套新衣服', '烤肉派對', '大盒樂高', '去兒童樂園'],
+    ['想要很久的大禮物', '出去玩兩天', '去主題樂園', '買一台新玩具車', '辦一場小派對', '全家吃大餐'],
+    ['買一雙新球鞋', '去海邊玩一天', '遙控直升機', '去九份吃芋圓', '吃到飽一餐', '晚睡一次'],
+    ['住一晚飯店', '去看一場表演', '機器人組裝包', '去溫泉泡湯', '全家去吃大餐', '玩一整天的遊戲'],
+    ['去野生動物園', '一台小相機', '露營區玩兩天', '遊樂園玩一整天', '去看棒球比賽', '很想要的一個玩具'],
+    ['墾丁玩三天', '去動物園住一晚', '滑板一組', '大型積木組', '日式料理大餐', '科學館一整天'],
+    ['墾丁玩兩天', '遙控賽車', '科學館住宿體驗', '去看音樂劇', '整套喜歡的繪本', '高級餐廳一餐'],
+    ['國內旅行兩天', '最新款遊戲機', '大型城堡積木', '全家一起去旅行', '寵物店挑一隻小動物', '高級飯店吃早餐'],
+    ['國內旅行三天', '最新款遊戲片', '水族館導覽', '大型模型組', '一台腳踏車', '高級餐廳吃一餐'],
+    ['國內旅行四天', '遙控無人機', '主題樂園門票', '大型積木城堡', '全家一日遊', '生日派對一場'],
+    ['國內旅行一週', '阿里山看日出', '游泳池包場', '大型禮物盒', '全家高級餐廳', '一台平板電腦'],
+    ['日本旅行三天', '台北 101 看夜景', '一台小平板', '生日派對一場', '全家出國一週', '大型玩具車'],
+    ['日本旅行一週', '一台筆電', '一次主題旅行', '大型禮物', '去看演唱會', '想要的新衣服'],
+    ['出國玩十天', '一台好的相機', '大型遊戲主機', '全家海外旅行', '想要的家電', '大型禮物一份'],
+    ['出國玩兩週', '一台好的電腦', '大型樂高模型', '全家豪華旅行', '一間小房間裝修', '大型禮物一份'],
+    ['出國玩一個月', '一輛電動車玩具', '全家夢想旅行', '房間大改造', '想要的大型家電', '一份大禮'],
+    ['大獎：全家旅行一個月', '一台好的電腦', '一台電動車玩具', '房間大改造', '想要的大型家電', '一份大禮'],
+  ];
+  // Starter chances: No. 1 gets 3%, the rest split the remaining 97% evenly (any remainder goes to the last number).
+  function defaultChances(n) {
+    if (n === 1) return [1000];
+    const rest = 970, base = Math.floor(rest / (n - 1)), out = [30];
+    for (let i = 1; i < n; i++) out.push(base + (i === n - 1 ? rest - base * (n - 1) : 0));
+    return out;
+  }
+  // Starter prizes for each level; levels past the list reuse the last set.
+  const exampleFor = t => {
+    const names = EXAMPLE_TIERS[Math.min(t, EXAMPLE_TIERS.length - 1)];
+    const p = defaultChances(names.length);
+    return names.map((n, i) => ({ n, p: p[i] }));
+  };
+  const CHEERS = ['好棒棒！', '太厲害了！', '你做到了！', '超讚的！', '真了不起！', '繼續加油！', '好乖喔！', '給你拍拍手！'];
+  const SEG_COLORS = ['--ink', '--sun', '--sky', '--leaf', '--plum'];
+
+  const emptyCard = () => Array(GOAL).fill(null);
+  let state = { name: '', stamps: emptyCard(), banked: 0, maxCards: 3, tiers: Array.from({ length: MAX_TIERS }, (_, t) => exampleFor(t)), customTiers: Array(MAX_TIERS).fill(false), history: [] };
+  let docRef = null;
+  let saving = Promise.resolve();
+
+  const $ = id => document.getElementById(id);
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const filled = () => state.stamps.filter(Boolean).length;
+  const isFull = () => filled() >= GOAL;
+  const tierFor = cards => Math.max(1, Math.min(cards, state.maxCards)) - 1;
+  const prizesFor = cards => {
+    const on = (state.tiers[tierFor(cards)] || []).map((x, i) => ({ ...x, i })).filter(isOn);
+    return on.length >= MIN_PRIZES ? on : exampleFor(tierFor(cards)).map((x, i) => ({ ...x, i }));
+  };
+  const isOn = x => x.n.trim() !== '' && x.p > 0;
+  const kidPrefix = () => state.name.trim() ? state.name.trim() + '，' : '';
+
+  /* ---------- storage: artifact db when available, phone storage otherwise ---------- */
+  function readLocal() {
+    try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  }
+  function writeLocal() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  function normTier(list, t) {
+    if (!Array.isArray(list)) return exampleFor(t);
+    const items = list.slice(0, MAX_PRIZES).map(x => typeof x === 'string'
+      ? { n: x.slice(0, 20), p: null }
+      : { n: String(x && x.n || '').slice(0, 20), p: x && Number.isFinite(x.p) ? Math.max(0, Math.min(1000, Math.round(x.p))) : null });
+    if (items.length < MIN_PRIZES) return exampleFor(t);
+    if (items.some(x => x.p === null)) { const p = defaultChances(items.length); items.forEach((x, i) => { x.p = p[i]; }); }
+    return items;
+  }
+  function normalize(s) {
+    const stamps = emptyCard();
+    if (Array.isArray(s.stamps)) s.stamps.slice(0, GOAL).forEach((v, i) => { stamps[i] = typeof v === 'string' ? v : null; });
+    // older versions kept a single prize list
+    const tiers = Array.isArray(s.tiers) ? s.tiers.slice(0, MAX_TIERS) : [Array.isArray(s.prizes) ? s.prizes : null];
+    const custom = Array.isArray(s.customTiers) ? s.customTiers : [!!s.customPrizes];
+    return {
+      name: typeof s.name === 'string' ? s.name : '',
+      stamps,
+      banked: Number.isInteger(s.banked) && s.banked > 0 ? s.banked : 0,
+      maxCards: Number.isInteger(s.maxCards) ? Math.max(1, Math.min(MAX_TIERS, s.maxCards)) : 3,
+      tiers: Array.from({ length: MAX_TIERS }, (_, i) => normTier(tiers[i], i)),
+      customTiers: Array.from({ length: MAX_TIERS }, (_, i) => !!custom[i]),
+      history: Array.isArray(s.history) ? s.history : []
+    };
+  }
+  function save() {
+    writeLocal();
+    if (!docRef) return;
+    const body = JSON.parse(JSON.stringify(state));
+    saving = saving.then(() => docRef.set(body)).then(
+      () => setSync('已同步到雲端'),
+      () => setSync('雲端同步失敗，已先存在這支手機')
+    );
+  }
+  function setSync(t) { $('sync').textContent = t; }
+
+  const local = readLocal();
+  if (local) state = normalize(local);
+
+  async function connect() {
+    if (!window.claude || !window.claude.use) { setSync('紀錄存在這支手機上'); return; }
+    let db = null;
+    try { db = await window.claude.use('db'); } catch (e) {}
+    if (!db) { setSync('紀錄存在這支手機上'); return; }
+    docRef = db.doc('cards/main');
+    let first = true;
+    docRef.onSnapshot(snap => {
+      if (snap.metadata.hasPendingWrites) return;
+      if (snap.exists && !editingSettings()) {
+        state = normalize(snap.data());
+        writeLocal();
+        render();
+      } else if (first && (filled() || state.banked || state.history.length || state.name || state.customTiers.some(Boolean))) {
+        save();
+      }
+      first = false;
+      setSync('已同步到雲端');
+    }, () => setSync('紀錄存在這支手機上'));
+  }
+
+  /* ---------- stamp graphic ---------- */
+  function stampSVG(cls, rot) {
+    return `<svg class="${cls}" viewBox="0 0 100 100" style="--r:${rot}deg;transform:rotate(${rot}deg)" aria-hidden="true">
+      <defs><filter id="rough${cls}" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="1" seed="${Math.floor(Math.random() * 50)}"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.1 1.55"/><feComposite in="SourceGraphic" operator="in"/></filter></defs>
+      <g filter="url(#rough${cls})" fill="none" stroke="var(--ink)">
+        <circle cx="50" cy="50" r="44" stroke-width="6"/>
+        <circle cx="50" cy="50" r="35" stroke-width="2"/>
+        <text x="50" y="57" text-anchor="middle" font-size="20" textLength="54" lengthAdjust="spacingAndGlyphs" fill="var(--ink)" stroke="none" font-family="Huninn, PingFang TC, Noto Sans TC, sans-serif" font-weight="700">好棒棒</text>
+        <path d="M30 72 Q50 80 70 72" stroke-width="2.5" stroke-linecap="round"/>
+      </g>
+    </svg>`;
+  }
+  const btnStamp = `<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="17" y="4" width="14" height="14" rx="7" fill="#fff"/><rect x="20" y="16" width="8" height="12" fill="#fff"/><rect x="8" y="27" width="32" height="9" rx="3" fill="#fff"/><rect x="6" y="39" width="36" height="4" rx="2" fill="rgba(255,255,255,.6)"/></svg>`;
+
+  /* ---------- render ---------- */
+  function rotFor(i) { return ((i * 47) % 31) - 15; }
+  let just = [];
+  function render() {
+    const n = filled();
+    $('title').textContent = state.name.trim() ? `${state.name.trim()}的好棒棒集點卡` : '好棒棒集點卡';
+    $('countNum').textContent = n;
+    $('barFill').style.width = (n / GOAL * 100) + '%';
+    const left = GOAL - n;
+    $('subtitle').textContent = left > 0 ? `再 ${left} 個印章就集滿一張卡` : '集滿了！可以轉輪盤或存起來';
+
+    const grid = $('grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < GOAL; i++) {
+      const has = !!state.stamps[i];
+      const s = document.createElement(has ? 'div' : 'button');
+      s.className = 'slot' + (i === GOAL - 1 ? ' prize-slot' : '') + (has ? ' filled' : '') + (just.includes(i) ? ' just' : '');
+      s.innerHTML = `<span class="n">${i === GOAL - 1 ? '🎁' : i + 1}</span>` + (has ? stampSVG('stamp', rotFor(i)) : '');
+      if (!has) {
+        s.setAttribute('aria-label', `在第 ${i + 1} 格蓋印章`);
+        s.addEventListener('click', () => addStamp(i));
+      } else {
+        s.addEventListener('click', () => tapStamp(i));
+      }
+      grid.appendChild(s);
+    }
+    just = [];
+
+    const b = state.banked;
+    $('bank').hidden = b === 0;
+    if (b) {
+      $('bankCards').innerHTML = '<i class="mini"></i>'.repeat(Math.min(b, 5));
+      $('bankTitle').textContent = `已經存了 ${b} 張卡`;
+      const next = b + 1;
+      $('bankSub').textContent = b >= state.maxCards
+        ? '已經存到最多張了，可以轉最大獎'
+        : `再集滿 1 張，就能轉 ${next} 張卡的大獎`;
+      $('bankSpin').hidden = isFull();
+      $('bankSpin').textContent = `用 ${b} 張卡轉`;
+    }
+
+    const btn = $('stampBtn');
+    if (n >= GOAL) {
+      btn.className = 'stamp-btn spin-ready';
+      btn.innerHTML = '集滿了！轉輪盤或存起來';
+      $('hint').textContent = '30 個印章都集滿了';
+    } else {
+      btn.className = 'stamp-btn';
+      btn.innerHTML = btnStamp + '<span>蓋好棒棒印章</span>';
+      $('hint').textContent = '點空格裡的數字蓋印章；雙擊已蓋的印章可以移除';
+    }
+  }
+
+  /* ---------- sounds ---------- */
+  let actx = null;
+  function audio() {
+    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) { actx = null; }
+    return actx;
+  }
+  function tone(freq, start, dur, type = 'sine', vol = .18) {
+    const a = audio(); if (!a) return;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, a.currentTime + start);
+    g.gain.linearRampToValueAtTime(vol, a.currentTime + start + .01);
+    g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + start + dur);
+    o.connect(g).connect(a.destination);
+    o.start(a.currentTime + start); o.stop(a.currentTime + start + dur + .05);
+  }
+  const thump = () => tone(110, 0, .18, 'triangle', .35);
+  const chime = () => [523, 659, 784, 1047].forEach((f, i) => tone(f, .25 + i * .09, .35));
+  const tick = () => tone(1400, 0, .04, 'square', .05);
+  const fanfare = () => [523, 523, 659, 784, 659, 784, 1047].forEach((f, i) => tone(f, i * .13, .3, 'triangle', .2));
+
+  /* ---------- confetti ---------- */
+  const cv = $('confetti'), cx = cv.getContext('2d');
+  let parts = [], raf = 0;
+  function confetti(count = 120) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const dpr = devicePixelRatio || 1;
+    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const colors = SEG_COLORS.map(css);
+    for (let i = 0; i < count; i++) {
+      parts.push({
+        x: innerWidth / 2 + (Math.random() - .5) * 60, y: innerHeight * .42,
+        vx: (Math.random() - .5) * 14, vy: -Math.random() * 15 - 4,
+        w: 6 + Math.random() * 6, h: 8 + Math.random() * 8, r: Math.random() * 6, vr: (Math.random() - .5) * .4,
+        c: colors[i % colors.length], life: 0
+      });
+    }
+    if (!raf) raf = requestAnimationFrame(stepConfetti);
+  }
+  function stepConfetti() {
+    cx.clearRect(0, 0, innerWidth, innerHeight);
+    parts = parts.filter(p => p.y < innerHeight + 40 && p.life < 260);
+    for (const p of parts) {
+      p.vy += .38; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.r += p.vr; p.life++;
+      cx.save(); cx.translate(p.x, p.y); cx.rotate(p.r); cx.fillStyle = p.c;
+      cx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.life / 8))); cx.restore();
+    }
+    raf = parts.length ? requestAnimationFrame(stepConfetti) : 0;
+    if (!raf) cx.clearRect(0, 0, innerWidth, innerHeight);
+  }
+
+  /* ---------- stamping ---------- */
+  let cheering = false;
+  function showCheer(msg, msg2, burst, then) {
+    cheering = true;
+    $('cheerStamp').innerHTML = stampSVG('big', -8);
+    $('cheerMsg').textContent = msg;
+    $('cheerMsg2').textContent = msg2;
+    $('cheer').hidden = false;
+    setTimeout(thump, 330);
+    setTimeout(() => { chime(); confetti(burst); }, 380);
+    setTimeout(() => { $('cheer').hidden = true; cheering = false; render(); if (then) then(); }, 2100);
+  }
+  // slot: stamp that one slot; count: stamp the first `count` empty slots
+  function addStamp(slot, count = 1) {
+    if (cheering) return;
+    if (isFull()) { openChoice(); return; }
+    let targets;
+    if (Number.isInteger(slot) && !state.stamps[slot]) targets = [slot];
+    else targets = state.stamps.map((v, i) => v ? -1 : i).filter(i => i >= 0).slice(0, count);
+    if (!targets.length) return;
+    const now = new Date().toISOString();
+    targets.forEach(i => { state.stamps[i] = now; });
+    const n = filled();
+    just = targets;
+    save();
+
+    let msg = targets.length > 1 ? `一次蓋了 ${targets.length} 個！` : CHEERS[Math.floor(Math.random() * CHEERS.length)];
+    let msg2 = `第 ${n} 個印章，還差 ${GOAL - n} 個`;
+    if (n === GOAL) { msg = '集滿 30 個了！'; msg2 = '可以轉輪盤，也可以存起來'; }
+    else if (n === 15) { msg2 = `已經一半了！還差 ${GOAL - n} 個`; }
+    else if (GOAL - n <= 3) { msg2 = `只差 ${GOAL - n} 個就集滿了！`; }
+    if (state.name.trim() && n !== GOAL) msg = kidPrefix() + msg;
+    showCheer(msg, msg2, n === GOAL ? 220 : 110, n === GOAL ? () => setTimeout(openChoice, 600) : null);
+  }
+  function openMulti() {
+    if (cheering) return;
+    if (isFull()) { openChoice(); return; }
+    const left = GOAL - filled();
+    $('multiText').textContent = `這張卡還有 ${left} 格`;
+    const grid = $('multiGrid');
+    grid.innerHTML = '';
+    for (const k of [1, 2, 3, 4, 5, 10]) {
+      const b = document.createElement('button');
+      b.innerHTML = `${k}<small>個</small>`;
+      b.disabled = k > left;
+      b.addEventListener('click', () => { $('multi').hidden = true; addStamp(null, k); });
+      grid.appendChild(b);
+    }
+    $('multi').hidden = false;
+  }
+  $('multiCancel').addEventListener('click', () => { $('multi').hidden = true; });
+  $('stampBtn').addEventListener('click', openMulti);
+  $('cheer').addEventListener('click', () => {}); // swallow taps while the animation plays
+
+  // double-tap an stamped cell to take its stamp off
+  let lastTap = { i: -1, t: 0 };
+  function tapStamp(i) {
+    const now = Date.now();
+    if (lastTap.i === i && now - lastTap.t < 400) {
+      lastTap = { i: -1, t: 0 };
+      if (cheering || !state.stamps[i]) return;
+      state.stamps[i] = null;
+      save(); render();
+      return;
+    }
+    lastTap = { i, t: now };
+  }
+
+  /* ---------- full card: spin now or save it ---------- */
+  function openChoice() {
+    if (!isFull()) return;
+    const cards = state.banked + 1;
+    $('choiceTitle').textContent = kidPrefix() + '集滿 30 個了！';
+    $('choiceText').textContent = state.banked
+      ? `加上之前存的 ${state.banked} 張，現在一共有 ${cards} 張卡。`
+      : '要現在轉輪盤，還是存起來換更大的獎？';
+    const canKeep = cards < state.maxCards;
+    if (!canKeep) $('choiceText').textContent = state.maxCards > 1
+      ? `已經累積到最多的 ${state.maxCards} 張卡了，轉最大獎吧！`
+      : '轉輪盤看看會得到什麼！';
+    $('choiceSpinSub').textContent = `用 ${cards} 張卡，轉「${tierName(tierFor(cards))}」的獎品`;
+    $('choiceKeep').hidden = !canKeep;
+    $('choiceKeepSub').textContent = `存起來共 ${cards} 張，下次轉「${tierName(tierFor(cards + 1))}」的獎品`;
+    $('choice').hidden = false;
+  }
+  $('choiceLater').addEventListener('click', () => { $('choice').hidden = true; });
+  $('choiceSpin').addEventListener('click', () => { $('choice').hidden = true; openWheel(); });
+  $('choiceKeep').addEventListener('click', () => {
+    $('choice').hidden = true;
+    if (state.banked + 1 >= state.maxCards) return;
+    state.banked += 1;
+    state.stamps = emptyCard();
+    save();
+    showCheer('存起來了！', `已經存了 ${state.banked} 張卡，繼續加油`, 140, null);
+  });
+  $('bankSpin').addEventListener('click', () => { if (!isFull() && state.banked) openWheel(); });
+
+  /* ---------- wheel ---------- */
+  const wc = $('wheel'), wx = wc.getContext('2d');
+  let rot = 0, spinning = false;
+  let demo = false, wheelCards = 1, wheelUsesCard = false;
+  function drawWheel() {
+    const size = wc.clientWidth || 320, dpr = devicePixelRatio || 1;
+    if (wc.width !== Math.round(size * dpr)) { wc.width = Math.round(size * dpr); wc.height = Math.round(size * dpr); }
+    wx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const items = prizesFor(wheelCards), list = items.map(x => x.n), n = list.length, seg = Math.PI * 2 / n, R = size / 2, c = R;
+    wx.clearRect(0, 0, size, size);
+    wx.beginPath(); wx.arc(c, c, R - 2, 0, Math.PI * 2); wx.fillStyle = css('--card'); wx.fill();
+    for (let i = 0; i < n; i++) {
+      const a0 = rot + i * seg, a1 = a0 + seg;
+      let col = css(SEG_COLORS[i % SEG_COLORS.length]);
+      if (n % SEG_COLORS.length === 1 && i === n - 1) col = css(SEG_COLORS[2]);
+      wx.beginPath(); wx.moveTo(c, c); wx.arc(c, c, R - 10, a0, a1); wx.closePath();
+      wx.fillStyle = col; wx.fill();
+      wx.strokeStyle = 'rgba(255,255,255,.9)'; wx.lineWidth = 3; wx.stroke();
+      wx.save(); wx.translate(c, c); wx.rotate(a0 + seg / 2);
+      wx.textBaseline = 'middle';
+      const isSun = SEG_COLORS[i % SEG_COLORS.length] === '--sun' && col === css('--sun');
+      // number badge near the rim
+      const bx = R - 34, br = Math.max(11, size / 28);
+      wx.beginPath(); wx.arc(bx, 0, br, 0, Math.PI * 2); wx.fillStyle = '#fff'; wx.fill();
+      wx.save(); wx.translate(bx, 0); wx.rotate(-(a0 + seg / 2)); // keep digits upright so 6 never reads as 9
+      wx.textAlign = 'center'; wx.fillStyle = isSun ? '#3a2a00' : col;
+      wx.font = `bold ${Math.round(br * 1.25)}px Huninn, "PingFang TC", "Noto Sans TC", sans-serif`;
+      wx.fillText(letter(items[i].i), 0, 1);
+      wx.restore();
+      wx.fillStyle = isSun ? '#3a2a00' : '#fff';
+      // the name sits between the center button (22% of the wheel) and the number badge
+      drawLabel(list[i], R * .22 + 8, bx - br - 6, seg, size, Math.cos(a0 + seg / 2) < 0);
+      wx.restore();
+    }
+    // rim lights
+    wx.beginPath(); wx.arc(c, c, R - 5, 0, Math.PI * 2); wx.strokeStyle = css('--ink'); wx.lineWidth = 8; wx.stroke();
+    for (let i = 0; i < 24; i++) {
+      const a = i / 24 * Math.PI * 2;
+      wx.beginPath(); wx.arc(c + Math.cos(a) * (R - 5), c + Math.sin(a) * (R - 5), 2.6, 0, Math.PI * 2);
+      wx.fillStyle = i % 2 ? '#fff' : css('--sun'); wx.fill();
+    }
+  }
+  const FONT = fs => `${fs}px Huninn, "PingFang TC", "Noto Sans TC", sans-serif`;
+  // Break before a parenthesis or at a space nearest the middle; never inside a number.
+  function splitLabel(t) {
+    const m = t.search(/[（(]/);
+    if (m > 0) return [t.slice(0, m).trim(), t.slice(m)];
+    const mid = t.length / 2;
+    let best = -1;
+    for (let i = 1; i < t.length - 1; i++) if (t[i] === ' ' && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+    if (best > 0) return [t.slice(0, best), t.slice(best + 1)];
+    let h = Math.ceil(mid);
+    while (h < t.length - 1 && /\d/.test(t[h - 1]) && /\d/.test(t[h])) h++;
+    return [t.slice(0, h), t.slice(h)];
+  }
+  // Fit a prize name on one line, else two, shrinking the font before ever cutting text.
+  // flip: names on the left half are turned around so they never read upside down.
+  function drawLabel(text, inner, outer, seg, size, flip) {
+    const avail = outer - inner;
+    const maxH = 2 * inner * Math.sin(seg / 2) * .9;
+    const start = Math.max(12, Math.min(20, size / 18));
+    const fits = (ls, f) => {
+      wx.font = FONT(f);
+      return ls.every(l => wx.measureText(l).width <= avail) && ls.length * f * 1.15 <= Math.max(maxH, f * 1.2);
+    };
+    let lines = [text], fs = start;
+    while (!fits(lines, fs) && fs > 14) fs--;
+    if (!fits(lines, fs) && text.length > 1) {
+      lines = splitLabel(text); fs = start;
+      while (!fits(lines, fs) && fs > 10) fs--;
+    }
+    wx.font = FONT(fs);
+    lines = lines.map(l => { while (wx.measureText(l).width > avail && l.length > 1) l = l.slice(0, -2) + '…'; return l; });
+    wx.save(); wx.translate((inner + outer) / 2, 0); if (flip) wx.rotate(Math.PI);
+    wx.textAlign = 'center';
+    lines.forEach((l, j) => wx.fillText(l, 0, (j - (lines.length - 1) / 2) * fs * 1.15));
+    wx.restore();
+  }
+  // preview: number of cards to preview; otherwise spends every saved card (plus this one if it is full)
+  function openWheel(preview) {
+    demo = Number.isInteger(preview);
+    if (demo) { wheelCards = preview; wheelUsesCard = false; }
+    else {
+      wheelUsesCard = isFull();
+      wheelCards = state.banked + (wheelUsesCard ? 1 : 0);
+      if (wheelCards < 1) return;
+    }
+    $('wheelSheet').hidden = false;
+    $('result').hidden = true;
+    $('spinBtn').hidden = false; $('spinBtn').disabled = false;
+    $('wheelBack').hidden = false;
+    $('newCard').textContent = demo ? '關閉預覽' : '收下獎品';
+    $('wheelTitle').textContent = demo
+      ? `預覽：${wheelCards} 張卡的獎品`
+      : `${kidPrefix()}用 ${wheelCards} 張卡轉輪盤！`;
+    requestAnimationFrame(drawWheel);
+  }
+  // Draw a prize by its chance. Chances that do not add up to 100% are scaled to their total.
+  function pickPrize(list) {
+    const total = list.reduce((a, x) => a + x.p, 0);
+    if (total <= 0) return Math.floor(Math.random() * list.length);
+    let r = Math.random() * total;
+    for (let i = 0; i < list.length; i++) { r -= list[i].p; if (r < 0) return i; }
+    return list.length - 1;
+  }
+  function spin() {
+    if (spinning) return;
+    spinning = true; audio();
+    $('spinBtn').disabled = true;
+    $('wheelBack').hidden = true;
+    const list = prizesFor(wheelCards).slice(), n = list.length, seg = Math.PI * 2 / n;
+    const k = pickPrize(list);
+    const jitter = (Math.random() - .5) * .7;
+    let target = -Math.PI / 2 - (k + .5 + jitter) * seg;
+    const start = rot;
+    while (target < start + Math.PI * 2 * 6) target += Math.PI * 2;
+    const dur = matchMedia('(prefers-reduced-motion: reduce)').matches ? 600 : 5200;
+    const t0 = performance.now();
+    let lastSeg = Math.floor(((-Math.PI / 2 - rot) / seg % n + n) % n);
+    function frame(now) {
+      const t = Math.min(1, (now - t0) / dur);
+      const e = 1 - Math.pow(1 - t, 4);
+      rot = start + (target - start) * e;
+      const cur = Math.floor(((-Math.PI / 2 - rot) / seg % n + n) % n);
+      if (cur !== lastSeg) { tick(); lastSeg = cur; }
+      drawWheel();
+      if (t < 1) requestAnimationFrame(frame); else finish(`${letter(list[k].i)}　${list[k].n}`);
+    }
+    requestAnimationFrame(frame);
+  }
+  function finish(prize) {
+    // record right away, so closing the app now never loses the prize
+    if (!demo) {
+      state.history.unshift({ date: new Date().toISOString(), prize, cards: wheelCards });
+      state.banked = 0;
+      if (wheelUsesCard) state.stamps = emptyCard();
+      save();
+    }
+    $('resultLabel').textContent = demo ? '預覽結果：會得到' : '恭喜你得到';
+    rot = rot % (Math.PI * 2);
+    spinning = false;
+    $('spinBtn').hidden = true;
+    $('resultPrize').textContent = prize;
+    $('result').hidden = false;
+    fanfare(); confetti(240);
+    setTimeout(() => confetti(160), 700);
+    render();
+  }
+  $('spinBtn').addEventListener('click', spin);
+  $('wheelBack').addEventListener('click', () => { if (!spinning) $('wheelSheet').hidden = true; });
+  $('newCard').addEventListener('click', () => { $('wheelSheet').hidden = true; render(); });
+  addEventListener('resize', () => { if (!$('wheelSheet').hidden) drawWheel(); });
+
+  /* ---------- settings ---------- */
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+  }
+  const tierBox = $('tiers');
+  function updateTotal(t) {
+    const on = state.tiers[t].filter(isOn), sum = on.reduce((a, x) => a + x.p, 0);
+    const enough = on.length >= MIN_PRIZES;
+    $('total' + t).textContent = `上轉盤 ${on.length} 個（至少 ${MIN_PRIZES} 個）｜機率合計 ${(sum / 10).toFixed(1)}%`
+      + (!enough ? `，還差 ${MIN_PRIZES - on.length} 個才能轉` : sum !== 1000 ? '（合計不是 100%，轉盤會依比例換算）' : '');
+    $('total' + t).classList.toggle('err', !enough || sum !== 1000);
+    paintMix(t);
+  }
+  // colour bar of the wheel: one segment per prize on the wheel, same colours and letters as the wheel
+  function paintMix(t) {
+    const bar = $('mix' + t), on = state.tiers[t].map((x, i) => ({ x, i })).filter(o => isOn(o.x));
+    const sum = on.reduce((a, o) => a + o.x.p, 0), scale = Math.max(1000, sum);
+    bar.innerHTML = '';
+    on.forEach((o, k) => {
+      const seg = document.createElement('div');
+      const isSun = SEG_COLORS[k % SEG_COLORS.length] === '--sun';
+      seg.className = 'mseg';
+      seg.style.width = (o.x.p / scale * 100) + '%';
+      seg.style.background = `var(${SEG_COLORS[k % SEG_COLORS.length]})`;
+      seg.style.color = isSun ? '#3a2a00' : '#fff';
+      seg.textContent = o.x.p / scale >= .08 ? `${letter(o.i)} ${(o.x.p / 10).toFixed(1)}%` : letter(o.i);
+      seg.title = `${letter(o.i)}：${o.x.n}　${(o.x.p / 10).toFixed(1)}%`;
+      bar.appendChild(seg);
+    });
+    if (sum < 1000) {
+      const gap = document.createElement('div');
+      gap.className = 'mseg gap';
+      gap.style.width = ((1000 - sum) / scale * 100) + '%';
+      gap.textContent = `缺 ${((1000 - sum) / 10).toFixed(1)}%`;
+      bar.appendChild(gap);
+    }
+    if (!on.length) bar.textContent = '還沒有上轉盤的獎品';
+  }
+  // Keep the chance at `fixed` as it is and share the rest (1000 = 100%) across the other prizes on the wheel,
+  // in proportion to their current chances. fixed = -1 shares the whole 100%. Rounded so the total is exact.
+  function spread(list, fixed) {
+    const target = 1000 - (fixed >= 0 ? list[fixed].p : 0);
+    const others = list.map((_, j) => j).filter(j => j !== fixed && list[j].p > 0);
+    if (!others.length) return;
+    const oldSum = others.reduce((a, j) => a + list[j].p, 0);
+    const raw = others.map(j => list[j].p * target / oldSum);
+    const out = raw.map(Math.floor);
+    const left = target - out.reduce((a, b) => a + b, 0);
+    raw.map((r, k) => ({ k, f: r - Math.floor(r) })).sort((a, b) => b.f - a.f)
+      .slice(0, Math.max(0, left)).forEach(o => { out[o.k]++; });
+    others.forEach((j, k) => { list[j].p = out[k]; });
+  }
+  // deleted prizes can be put back for a few seconds
+  const undoTimers = [];
+  function hideUndo(t) { clearTimeout(undoTimers[t]); $('undo' + t).hidden = true; }
+  function showUndo(t, index, removed) {
+    const bar = $('undo' + t);
+    bar.innerHTML = `<span>已刪除「${removed.n || '（未命名）'}」</span><button class="btn" type="button">復原</button>`;
+    bar.hidden = false;
+    bar.querySelector('button').addEventListener('click', () => {
+      const list = state.tiers[t];
+      list.splice(index, 0, removed);
+      if (removed.p > 0) spread(list, index);   // gives its chance back, the others make room
+      state.customTiers[t] = true;
+      renderRows(t);
+    });
+    clearTimeout(undoTimers[t]);
+    undoTimers[t] = setTimeout(() => { bar.hidden = true; }, 6000);
+  }
+  function renderRows(t) {
+    const list = state.tiers[t], box = $('rows' + t);
+    box.innerHTML = '';
+    list.forEach((item, i) => {
+      const row = document.createElement('div');
+      row.className = 'prow';
+      row.innerHTML = '<span class="plabel"></span><input class="pname" type="text" maxlength="20" placeholder="獎品名稱"><input class="pp" type="number" inputmode="decimal" min="0" max="100" step="0.1" aria-label="機率（%）"><span class="pct">%</span><label class="sw" title="上轉盤"><input class="swin" type="checkbox" aria-label="上轉盤"><span class="swknob"></span></label><button class="pdel" aria-label="刪除這個獎品">✕</button><span class="pstate"></span>';
+      const name = row.querySelector('.pname'), pp = row.querySelector('.pp'), sw = row.querySelector('.swin'), del = row.querySelector('.pdel');
+      name.value = item.n;
+      name.addEventListener('input', () => {
+        const wasNamed = item.n.trim() !== '';
+        item.n = name.value.slice(0, 20);
+        if (!item.n.trim()) {
+          // no name: it leaves the wheel and its chance goes back to the others
+          if (item.p) { item.p = 0; spread(list, -1); }
+        } else if (!wasNamed && item.p === 0) {
+          // a newly named prize takes an equal share from the prizes on the wheel
+          item.p = Math.floor(1000 / (list.filter((x, j) => j !== i && isOn(x)).length + 1));
+          spread(list, i);
+        }
+        state.customTiers[t] = true; paintRows(t);
+      });
+      name.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (pp.disabled) name.blur(); else pp.focus();
+      });
+      pp.addEventListener('focus', () => pp.select());
+      pp.addEventListener('input', () => {
+        const v = parseFloat(pp.value);
+        item.p = Number.isFinite(v) ? Math.max(0, Math.min(1000, Math.round(v * 10))) : 0;
+        spread(list, i);
+        state.customTiers[t] = true; paintRows(t);
+      });
+      sw.addEventListener('change', () => {
+        if (sw.checked) {
+          item.p = Math.floor(1000 / (list.filter((x, j) => j !== i && isOn(x)).length + 1));
+          spread(list, i);
+        } else {
+          item.p = 0; spread(list, -1);
+        }
+        state.customTiers[t] = true; paintRows(t);
+      });
+      del.disabled = list.length <= MIN_PRIZES;
+      del.addEventListener('click', () => {
+        const removed = list.splice(i, 1)[0];
+        spread(list, -1); state.customTiers[t] = true;
+        renderRows(t);
+        showUndo(t, i, removed);
+      });
+      box.appendChild(row);
+    });
+    paintRows(t);
+  }
+  // refresh letters, status and chances of every row without rebuilding the inputs (keeps typing focus)
+  function paintRows(t) {
+    const list = state.tiers[t], rows = $('rows' + t).children;
+    list.forEach((item, i) => {
+      const row = rows[i], on = isOn(item), named = item.n.trim() !== '';
+      row.classList.toggle('off', !on);
+      row.querySelector('.plabel').textContent = letter(i);
+      const pp = row.querySelector('.pp');
+      pp.disabled = !named;
+      if (pp !== document.activeElement) pp.value = (item.p / 10).toFixed(1);
+      const sw = row.querySelector('.swin');
+      sw.checked = on; sw.disabled = !named;
+      const st = row.querySelector('.pstate');
+      st.className = 'pstate ' + (on ? 'on' : 'off');
+      st.textContent = on ? '● 上轉盤' : !named ? '○ 還沒有名字，不上轉盤' : '○ 已關閉，不上轉盤';
+    });
+    $('add' + t).disabled = list.length >= MAX_PRIZES;
+    hideUndo(t);
+    updateTotal(t);
+  }
+  // what would stop 儲存 from working: a tier in use needs at least MIN_PRIZES prizes on the wheel
+  function settingsProblems() {
+    const out = [];
+    for (let t = 0; t < state.maxCards; t++) {
+      const n = state.tiers[t].filter(isOn).length;
+      if (n < MIN_PRIZES) out.push(`${tierName(t)} 還差 ${MIN_PRIZES - n} 個上轉盤的獎品`);
+    }
+    return out;
+  }
+  Array.from({ length: MAX_TIERS }).forEach((_, t) => {
+    const box = document.createElement('div');
+    box.className = 'tier';
+    box.id = 'tierBox' + t;
+    box.innerHTML = `<label id="tierLabel${t}">${tierName(t)}</label><div class="mixbar" id="mix${t}"></div><div class="note sum" id="total${t}"></div><div class="undo" id="undo${t}" hidden></div><div class="prows" id="rows${t}"></div><div class="row"><button class="btn" id="add${t}">＋ 新增獎品</button><button class="btn" id="reset${t}">恢復預設（${exampleFor(t).length} 個）</button></div><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
+    tierBox.appendChild(box);
+    $('add' + t).addEventListener('click', () => {
+      if (state.tiers[t].length >= MAX_PRIZES) return;
+      state.tiers[t].push({ n: '', p: 0 }); state.customTiers[t] = true;
+      renderRows(t);
+      const row = $('rows' + t).lastElementChild;
+      row.classList.add('fresh');
+      row.querySelector('.pname').focus();
+    });
+    $('reset' + t).addEventListener('click', () => {
+      state.tiers[t] = exampleFor(t); state.customTiers[t] = false;
+      renderRows(t);
+    });
+    $('tierPreview' + t).addEventListener('click', () => {
+      if (state.tiers[t].filter(isOn).length < MIN_PRIZES) { $('tierNote' + t).textContent = `至少要有 ${MIN_PRIZES} 個上轉盤的獎品（有名字、機率大於 0），才能轉。`; return; }
+      openWheel(t + 1);
+    });
+  });
+  for (let k = 1; k <= MAX_TIERS; k++) {
+    const o = document.createElement('option');
+    o.value = k;
+    o.textContent = k === 1 ? '1 張（不累積，集滿就轉）' : `${k} 張`;
+    $('maxCards').appendChild(o);
+  }
+  $('maxCards').addEventListener('change', e => {
+    state.maxCards = Math.max(1, Math.min(MAX_TIERS, parseInt(e.target.value, 10) || 1));
+    renderSettings(); render();
+  });
+  function renderSettings() {
+    $('kidName').value = state.name;
+    $('maxCards').value = state.maxCards;
+    $('maxCardsNote').textContent = state.maxCards === 1
+      ? '集滿 30 個就直接轉輪盤，不能存起來。'
+      : `集滿的卡最多可以存到 ${state.maxCards} 張，存到 ${state.maxCards} 張時就要轉輪盤。`;
+    for (let t = 0; t < MAX_TIERS; t++) {
+      $('tierBox' + t).hidden = t >= state.maxCards;
+      $('tierLabel' + t).textContent = tierName(t) + (t === state.maxCards - 1 && t > 0 ? '　最大獎' : '');
+      renderRows(t);
+      $('tierNote' + t).textContent = state.customTiers[t]
+        ? `名字和機率都可以改，至少 ${MIN_PRIZES} 個，最多 ${MAX_PRIZES} 個。`
+        : `目前是範例獎品，換成你們家的獎品就好。至少 ${MIN_PRIZES} 個，最多 ${MAX_PRIZES} 個。`;
+    }
+    $('undoBtn').disabled = filled() === 0;
+    $('resetBtn').disabled = filled() === 0;
+    $('unbankBtn').disabled = state.banked === 0;
+    $('bankNote').textContent = `目前存了 ${state.banked} 張集滿的卡。`;
+    $('resetConfirm').hidden = true;
+    const h = $('history'); h.innerHTML = '';
+    if (!state.history.length) { h.innerHTML = '<li class="empty">還沒有得獎紀錄，轉過輪盤就會出現在這裡。</li>'; return; }
+    for (const r of state.history) {
+      const li = document.createElement('li');
+      const a = document.createElement('span'); a.textContent = r.prize + (r.cards > 1 ? `（${r.cards} 張卡）` : '');
+      const b = document.createElement('span'); b.className = 'd'; b.textContent = fmtDate(r.date);
+      li.append(a, b); h.appendChild(li);
+    }
+  }
+  /* ---------- settings: edits are a draft until 儲存 ---------- */
+  const settingsSnapshot = () => JSON.stringify({ name: state.name, maxCards: state.maxCards, tiers: state.tiers, customTiers: state.customTiers, stamps: state.stamps, banked: state.banked });
+  let baseline = '';
+  const isDirty = () => settingsSnapshot() !== baseline;
+  const settingsOpen = () => !$('settingsSheet').hidden;
+  const editingSettings = () => settingsOpen() && isDirty();
+  let stayNeedsEntry = false;
+  function openSettings() {
+    baseline = settingsSnapshot();
+    renderSettings();
+    $('settingsSheet').hidden = false;
+    history.pushState({ settings: true }, '');   // so the phone's back button asks first
+  }
+  function closeSettingsSheet() {
+    $('settingsSheet').hidden = true;
+    $('leaveAsk').hidden = true; $('askNote').hidden = true;
+    if (history.state && history.state.settings) history.back();
+    render();
+  }
+  function requestClose() {
+    if (isDirty()) $('leaveAsk').hidden = false;
+    else closeSettingsSheet();
+  }
+  $('openSettings').addEventListener('click', openSettings);
+  $('closeSettings').addEventListener('click', requestClose);
+  window.addEventListener('popstate', () => {
+    if (!settingsOpen()) return;
+    stayNeedsEntry = true;   // the back press already removed our history entry
+    requestClose();
+  });
+  $('askSave').addEventListener('click', () => {
+    const problems = settingsProblems();
+    if (problems.length) { $('askNote').textContent = '還不能儲存：' + problems.join('；'); $('askNote').hidden = false; return; }
+    save(); baseline = settingsSnapshot(); closeSettingsSheet();
+  });
+  $('askDiscard').addEventListener('click', () => { Object.assign(state, JSON.parse(baseline)); closeSettingsSheet(); });
+  $('askStay').addEventListener('click', () => {
+    $('leaveAsk').hidden = true;
+    if (stayNeedsEntry) { stayNeedsEntry = false; history.pushState({ settings: true }, ''); }
+  });
+  $('kidName').addEventListener('input', e => { state.name = e.target.value.slice(0, 12); });
+  $('undoBtn').addEventListener('click', () => {
+    let last = -1;
+    state.stamps.forEach((v, i) => { if (v && (last < 0 || v >= state.stamps[last])) last = i; });
+    if (last < 0) return;
+    state.stamps[last] = null; renderSettings(); render();
+  });
+  $('resetBtn').addEventListener('click', () => { $('resetCount').textContent = filled(); $('resetConfirm').hidden = false; });
+  $('resetNo').addEventListener('click', () => { $('resetConfirm').hidden = true; });
+  $('resetYes').addEventListener('click', () => { state.stamps = emptyCard(); renderSettings(); render(); });
+  $('unbankBtn').addEventListener('click', () => {
+    if (!state.banked) return;
+    state.banked -= 1; renderSettings(); render();
+  });
+
+  render();
+  connect();
+})();
+</script>
