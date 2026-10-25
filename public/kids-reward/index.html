@@ -1038,7 +1038,7 @@ button.slot .n { opacity: 1; font-size: .95rem; }
     const box = document.createElement('div');
     box.className = 'tier';
     box.id = 'tierBox' + t;
-    box.innerHTML = `<label id="tierLabel${t}">${tierName(t)}</label><div class="mixbar" id="mix${t}"></div><div class="note sum" id="total${t}"></div><div class="undo" id="undo${t}" hidden></div><div class="prows" id="rows${t}"></div><div class="row"><button class="btn" id="add${t}">＋ 新增獎品</button></div><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
+    box.innerHTML = `<label id="tierLabel${t}">${tierName(t)}</label><div class="mixbar" id="mix${t}"></div><div class="note sum" id="total${t}"></div><div class="undo" id="undo${t}" hidden></div><div class="prows" id="rows${t}"></div><div class="row"><button class="btn" id="add${t}">＋ 新增獎品</button><button class="btn" id="reset${t}">恢復預設（${exampleFor(t).length} 個）</button></div><div class="note" id="tierNote${t}"></div><button class="btn" id="tierPreview${t}">預覽這組轉盤（不會記錄）</button>`;
     tierBox.appendChild(box);
     $('add' + t).addEventListener('click', () => {
       if (state.tiers[t].length >= MAX_PRIZES) return;
@@ -1047,6 +1047,10 @@ button.slot .n { opacity: 1; font-size: .95rem; }
       const row = $('rows' + t).lastElementChild;
       row.classList.add('fresh');
       row.querySelector('.pname').focus();
+    });
+    $('reset' + t).addEventListener('click', () => {
+      state.tiers[t] = exampleFor(t); state.customTiers[t] = false;
+      renderRows(t);
     });
     $('tierPreview' + t).addEventListener('click', () => {
       if (state.tiers[t].filter(isOn).length < MIN_PRIZES) { $('tierNote' + t).textContent = `至少要有 ${MIN_PRIZES} 個上轉盤的獎品（有名字、機率大於 0），才能轉。`; return; }
